@@ -1,4 +1,4 @@
-#180420
+#180501
 #_EDCBX_HIDE_
 #視聴予約なら終了
 if ($env:RecMode -eq 4) { exit }
@@ -13,7 +13,7 @@ $log_toggle=1
 #ログ出力ディレクトリ
 $log_path='C:\DTV\EncLog'
 #ログを残す数を指定
-$logcnt_max=100
+$logcnt_max=1000
 #--------------------フォルダサイズを一定に保つファイルの削除--------------------
 #0=無効、1=有効
 $del_toggle=1
@@ -25,7 +25,7 @@ $jpg_toggle=1
 #連番jpgを出力するフォルダ用のディレクトリ
 $jpg_path='C:\Users\Shibanyan\Desktop\TVTest'
 #jpg出力したい自動予約キーワード
-$jpg_addkey='フランキス|BEATLESS|エヴァーガーデン|夏目友人帳|キズナアイのBEATスクランブル|Lostorage|重神機パンドーラ|フルメタル|銀河英雄伝説|オルタナティブ|シュタインズ|ハイスクールD×D'
+$jpg_addkey='フランキス|BEATLESS|エヴァーガーデン|夏目友人帳|キズナアイのBEATスクランブル|Lostorage|フルメタル|ソードアート'
 #jpg用ffmpeg引数(横pxが1440のとき、$scale=',scale=1920:1080'が使用可能)
 function arg_jpg {
     $global:arg="-y -hide_banner -nostats -an -skip_frame nokey -i `"${env:FilePath}`" -vf yadif=0:-1:1,hqdn3d=4.0${scale} -f image2 -q:v 0 -vsync 0 `"${jpg_path}\${env:FileName}\%05d.jpg`""
@@ -50,7 +50,7 @@ $bas_folder_path='C:\DTV\backupandsync'
 $err_folder_path='C:\Users\Shibanyan\Desktop'
 #mp4用ffmpeg引数
 function arg_mp4 {
-    $global:arg="-y -hide_banner -nostats -init_hw_device qsv:hw -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf yadif=0:-1:1,hqdn3d=4.0,scale=1280:720,unsharp=3:3:0.5:3:3:0.5:0 -global_quality ${quality} -c:v h264_qsv -preset:v veryslow -g 300 -bf 16 -refs 9 -b_strategy 1 -look_ahead 1 -look_ahead_downsampling off -pix_fmt nv12 -map 0:p:${env:SID10}:0 -map 0:p:${env:SID10}:1 -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
+    $global:arg="-y -hide_banner -nostats -init_hw_device qsv:hw -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf yadif=0:-1:1,hqdn3d=4.0,scale=1280:720,unsharp=3:3:0.5:3:3:0.5:0 -global_quality ${quality} -c:v h264_qsv -preset:v veryslow -g 300 -bf 16 -refs 9 -b_strategy 1 -look_ahead 1 -look_ahead_downsampling off -pix_fmt nv12 -map 0:p:${env:SID10} -sn -dn -ignore_unknown -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
 }
 #--------------------ツイート警告--------------------
 #0=無効、1=有効
@@ -122,6 +122,9 @@ function ffprocess {
     Write-Output $p.StandardError.ReadToEnd()
     #プロセス終了まで待機
     $p.WaitForExit()
+    #終了コードを変数に格納
+    $global:ExitCode=$p.ExitCode
+    #リソースを開放
     $p.Close()
 }
 
@@ -149,8 +152,10 @@ if (("${jpg_toggle}" -eq "1") -And ($("${env:Addkey}" -match "${jpg_addkey}") -e
     $ts_width=$ts_width.ffprobe.streams.stream.width
     #SAR比(1440x1080しか想定してないけど)によるフィルタ設定、jpg出力
     if ("${ts_width}" -eq "1440") { $scale=',scale=1920:1080' }
+    #jpg用ffmpeg引数を遅延展開
     $file="${ffpath}\ffmpeg.exe"
     arg_jpg
+    #ffmpegprocessを起動
     ffprocess
 }
 
@@ -201,29 +206,30 @@ if ($(Get-Content -LiteralPath "${env:FilePath}.program.txt" | Select-String -Si
 Write-Output "audio_option:$audio_option"
 
 #====================エンコード====================
-#エンコプロセス引数
+#mp4用ffmpeg引数を遅延展開
 $file="${ffpath}\ffmpeg.exe"
 arg_mp4
 Write-Output "Arguments:$arg"
 
-#ファイルサイズが0バイト且つループカウントが25以下までの間、エンコードを試みる
+#終了コードが1且つループカウントが25以下までの間、エンコードを試みる
 do {
     #録画の開始終了のビジー時を避ける、再試行の効果を出すためにちょっと待つ
     Start-Sleep -s 5
-    #エンコプロセス
+    #ffmpegprocessを起動
     ffprocess
+    Write-Output "ExitCode:$ExitCode"
     #エンコ後mp4のサイズを取得
     $mp4_size=$(Get-ChildItem -LiteralPath "${tmp_folder_path}\${env:FileName}.mp4").Length
     Write-Output "mp4:$([math]::round(${mp4_size}/1MB,0))MB"
     #ループカウント
     $cnt++
     Write-Output "エンコード回数:$cnt"
-} while (($mp4_size -eq 0) -And ($cnt -le 25))
+} while (($ExitCode -eq 1) -And ($cnt -le 25))
 
 #====================mp4ファイルサイズ判別====================
-#mp4のファイルサイズ、エンコード回数による条件分岐
-if (($mp4_size -eq 0) -Or ($mp4_size -gt 10GB)) {
-    #25回試行してもmp4が存在しないかエンコ失敗で0バイト、結果が10GBより大きい場合、ts、ts.program.txt、mp4を退避する
+#ffmpegの終了コード、mp4のファイルサイズによる条件分岐
+if (($ExitCode -eq 1) -Or ($mp4_size -gt 10GB)) {
+    #25回試行してもffmpegの終了コードが1、mp4が10GBより大きい場合、ts、ts.program.txt、mp4を退避する
     Move-Item -LiteralPath "${env:FilePath}" "${err_folder_path}"
     Move-Item -LiteralPath "${env:FilePath}.program.txt" "${err_folder_path}"
     Move-Item -LiteralPath "${tmp_folder_path}\${env:FileName}.mp4" "${err_folder_path}"
@@ -231,14 +237,15 @@ if (($mp4_size -eq 0) -Or ($mp4_size -gt 10GB)) {
     #ツイート警告
     if ("${tweet_toggle}" -eq "1") {
         $env:tweet_content="ERROR:${env:FileName}.tsと関連ファイルを退避しました。ログを確認して下さい。"
-        Start-Process "${ruby_path}" "${tweet_rb_path}" -WindowStyle Hidden -Wait
+        #Start-Process "${ruby_path}" "${tweet_rb_path}" -WindowStyle Hidden -Wait
+        &"${ruby_path}" "${tweet_rb_path}"
     }
     #バルーンチップ
     $ToolTipIcon='Error'
     $enc_result='失敗'
     BalloonTip
 } elseif ($mp4_size -le 10GB) {
-    #mp4が0バイトでない且つ10GB以下ならmp4をbas_folder_pathに投げる
+    #それ以外でmp4が10GB以下ならmp4をbas_folder_pathに投げる
     Move-Item -LiteralPath "${tmp_folder_path}\${env:FileName}.mp4" "${bas_folder_path}"
     Write-Output "エンコード終了:ts=$([math]::round(${ts_size}/1GB,2))GB mp4=$([math]::round(${mp4_size}/1MB,0))MB"
     #バルーンチップ
