@@ -1,4 +1,4 @@
-#180501
+#180514
 #_EDCBX_HIDE_
 #視聴予約なら終了
 if ($env:RecMode -eq 4) { exit }
@@ -50,7 +50,7 @@ $bas_folder_path='C:\DTV\backupandsync'
 $err_folder_path='C:\Users\Shibanyan\Desktop'
 #mp4用ffmpeg引数
 function arg_mp4 {
-    $global:arg="-y -hide_banner -nostats -init_hw_device qsv:hw -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf yadif=0:-1:1,hqdn3d=4.0,scale=1280:720,unsharp=3:3:0.5:3:3:0.5:0 -global_quality ${quality} -c:v h264_qsv -preset:v veryslow -g 300 -bf 16 -refs 9 -b_strategy 1 -look_ahead 1 -look_ahead_downsampling off -pix_fmt nv12 -map 0:p:${env:SID10} -sn -dn -ignore_unknown -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
+    $global:arg="-y -hide_banner -nostats -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf yadif=0:-1:1,hqdn3d=4.0,scale=1280:720,unsharp=3:3:0.5:3:3:0.5:0 -global_quality ${quality} -c:v h264_qsv -preset:v veryslow -g 300 -bf 16 -refs 9 -b_strategy 1 -look_ahead 1 -look_ahead_downsampling off -pix_fmt nv12 -map 0:p:${env:SID10} -sn -dn -ignore_unknown -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
 }
 #--------------------ツイート警告--------------------
 #0=無効、1=有効
