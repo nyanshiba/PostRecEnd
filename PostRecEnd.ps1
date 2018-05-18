@@ -1,4 +1,4 @@
-#180514
+#180518
 #_EDCBX_HIDE_
 #視聴予約なら終了
 if ($env:RecMode -eq 4) { exit }
@@ -14,11 +14,16 @@ $log_toggle=1
 $log_path='C:\DTV\EncLog'
 #ログを残す数を指定
 $logcnt_max=1000
-#--------------------フォルダサイズを一定に保つファイルの削除--------------------
+#--------------------tsフォルダサイズを一定に保つファイルの削除--------------------
 #0=無効、1=有効
-$del_toggle=1
+$ts_del_toggle=1
 #録画フォルダの最大サイズを指定(0～8EB、単位:任意)
-$foldersize_max=100GB
+$ts_folder_max=100GB
+#--------------------mp4フォルダサイズを一定に保つファイルの削除--------------------
+#0=無効、1=有効
+$mp4_del_toggle=1
+#backup and sync用フォルダの最大サイズを指定(0～8EB、単位:任意)
+$mp4_folder_max=20GB
 #--------------------jpg出力--------------------
 #0=無効、1=有効
 $jpg_toggle=1
@@ -50,7 +55,7 @@ $bas_folder_path='C:\DTV\backupandsync'
 $err_folder_path='C:\Users\Shibanyan\Desktop'
 #mp4用ffmpeg引数
 function arg_mp4 {
-    $global:arg="-y -hide_banner -nostats -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf yadif=0:-1:1,hqdn3d=4.0,scale=1280:720,unsharp=3:3:0.5:3:3:0.5:0 -global_quality ${quality} -c:v h264_qsv -preset:v veryslow -g 300 -bf 16 -refs 9 -b_strategy 1 -look_ahead 1 -look_ahead_downsampling off -pix_fmt nv12 -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 -map 0:p:${env:SID10} -sn -dn -ignore_unknown -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
+    $global:arg="-y -hide_banner -nostats -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf yadif=0:-1:1,hqdn3d=3.0,scale=1280:720:flags=lanczos+accurate_rnd,unsharp=3:3:1:3:3:1:0 -global_quality ${quality} -c:v h264_qsv -preset:v veryslow -g 300 -bf 16 -refs 9 -b_strategy 1 -look_ahead 1 -look_ahead_downsampling off -pix_fmt nv12 -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 -map 0:p:${env:SID10} -sn -dn -ignore_unknown -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
 }
 #--------------------ツイート警告--------------------
 #0=無効、1=有効
@@ -159,25 +164,44 @@ if (("${jpg_toggle}" -eq "1") -And ($("${env:Addkey}" -match "${jpg_addkey}") -e
     ffprocess
 }
 
-#====================フォルダサイズを一定に保つファイルの削除====================
-#del_toggle=1なら実行
-if ("${del_toggle}" -eq "1") {
-    #録画フォルダの合計サイズを変数"folder_size"に指定
-    $folder_size=$(Get-ChildItem "${env:FolderPath}" | Measure-Object -Sum Length).Sum
-    Write-Output "録画フォルダ:$([math]::round(${folder_size}/1GB,2))GB"
-    #録画フォルダの合計サイズがfoldersize_maxGBより大きいならファイルの削除
-    while ($folder_size -gt $foldersize_max) {
+#====================tsフォルダサイズを一定に保つファイルの削除====================
+#ts_del_toggle=1なら実行
+if ("${ts_del_toggle}" -eq "1") {
+    #録画フォルダの合計サイズを変数"ts_folder_size"に指定
+    $ts_folder_size=$(Get-ChildItem "${env:FolderPath}" | Measure-Object -Sum Length).Sum
+    Write-Output "録画フォルダ:$([math]::round(${ts_folder_size}/1GB,2))GB"
+    #録画フォルダの合計サイズがts_folder_maxGBより大きいならファイルの削除
+    while ($ts_folder_size -gt $ts_folder_max) {
         #録画フォルダ内の1番古いtsファイルのファイル名を取得
         #録画フォルダ内のtsファイルに対し、最終更新年月日でソートした1番最初にくるやつ、ファイル名(拡張子なし)を取得
-        $del_name=$(Get-ChildItem "${env:FolderPath}\*.ts" | Sort-Object LastWriteTime | Select-Object BaseName -First 1).BaseName
-        #ts、同名のts.program.txt、mp4削除
-        Remove-Item -LiteralPath "${env:FolderPath}\${del_name}.ts"
-        Remove-Item -LiteralPath "${env:FolderPath}\${del_name}.ts.program.txt"
-        Remove-Item -LiteralPath "${bas_folder_path}\${del_name}.mp4"
-        Write-Output "削除:${del_name}.ts、ts.program.txt、mp4"
+        $ts_del_name=$(Get-ChildItem "${env:FolderPath}\*.ts" | Sort-Object LastWriteTime | Select-Object BaseName -First 1).BaseName
+        #ts、同名のts.program.txt削除
+        Remove-Item -LiteralPath "${env:FolderPath}\${ts_del_name}.ts"
+        Remove-Item -LiteralPath "${env:FolderPath}\${ts_del_name}.ts.program.txt"
+        Write-Output "削除:${ts_del_name}.ts、ts.program.txt"
         #録画フォルダの合計サイズを取得
-        $folder_size=$(Get-ChildItem "${env:FolderPath}" | Measure-Object -Sum Length).Sum
-        Write-Output "録画フォルダ:$([math]::round(${folder_size}/1GB,2))GB"
+        $ts_folder_size=$(Get-ChildItem "${env:FolderPath}" | Measure-Object -Sum Length).Sum
+        Write-Output "録画フォルダ:$([math]::round(${ts_folder_size}/1GB,2))GB"
+    }
+}
+
+#====================mp4フォルダサイズを一定に保つファイルの削除====================
+#mp4_del_toggle=1なら実行
+if ("${mp4_del_toggle}" -eq "1") {
+    #backup and sync用フォルダの合計サイズを変数"mp4_folder_size"に指定
+    $mp4_folder_size=$(Get-ChildItem "${bas_folder_path}" | Measure-Object -Sum Length).Sum
+    Write-Output "backup and sync用フォルダ:$([math]::round(${mp4_folder_size}/1GB,2))GB"
+    #backup and sync用フォルダの合計サイズがmp4_folder_maxGBより大きいならファイルの削除
+    while ($mp4_folder_size -gt $mp4_folder_max) {
+        #backup and sync用フォルダ内の1番古いmp4ファイルのファイル名を取得
+        #backup and sync用フォルダ内のmp4ファイルに対し、最終更新年月日でソートした1番最初にくるやつ、ファイル名(拡張子なし)を取得
+        $mp4_del_name=$(Get-ChildItem "${bas_folder_path}\*.mp4" | Sort-Object LastWriteTime | Select-Object BaseName -First 1).BaseName
+        #mp4削除
+        Remove-Item -LiteralPath "${bas_folder_path}\${mp4_del_name}.mp4"
+        Write-Output "削除:${mp4_del_name}.mp4"
+        #backup and sync用フォルダの合計サイズを取得
+        $mp4_folder_size=$(Get-ChildItem "${bas_folder_path}" | Measure-Object -Sum Length).Sum
+        Write-Output "backup and sync用フォルダ:$([math]::round(${mp4_folder_size}/1GB,2))GB"
     }
 }
 
