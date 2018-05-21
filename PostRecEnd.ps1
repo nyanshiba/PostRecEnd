@@ -1,4 +1,4 @@
-#180520
+#180522
 #_EDCBX_HIDE_
 #視聴予約なら終了
 if ($env:RecMode -eq 4) { exit }
@@ -52,13 +52,13 @@ function arg_jpg {
 }
 #--------------------tsファイルサイズ判別--------------------
 #通常品質
-$quality_normal=27
+$quality_normal=28
 #0=無効(通常品質のみ使用)、1=有効(通常・低品質を閾値を元に切り替える)
 $tssize_toggle=1
 #閾値
 $tssize_max=20GB
 #低品質
-$quality_low=29
+$quality_low=30
 #--------------------エンコード--------------------
 #ffmpeg.exe、ffprobe.exeがあるディレクトリ
 $ffpath='C:\DTV\ffmpeg'
@@ -70,7 +70,7 @@ $bas_folder_path='C:\DTV\backupandsync'
 $err_folder_path='C:\Users\sbn\Desktop'
 #mp4用ffmpeg引数
 function arg_mp4 {
-    $global:arg="-y -hide_banner -nostats -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf yadif=0:-1:1,hqdn3d=4.0,scale=1280:720:flags=lanczos+accurate_rnd,unsharp=3:3:0.5:3:3:0.5:0 -global_quality ${quality} -c:v h264_qsv -preset:v veryslow -g 300 -bf 16 -refs 9 -b_strategy 1 -look_ahead 1 -look_ahead_downsampling off -pix_fmt nv12 -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${pid_need} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
+    $global:arg="-y -hide_banner -nostats -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf yadif=0:-1:1,hqdn3d,unsharp=3:3:2,scale=1280:720 -global_quality ${quality} -c:v h264_qsv -preset:v veryslow -g 300 -bf 16 -refs 9 -b_strategy 1 -look_ahead 1 -look_ahead_downsampling off -pix_fmt nv12 -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${pid_need} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
 }
 #--------------------ツイート警告--------------------
 #0=無効、1=有効
@@ -276,7 +276,7 @@ Write-Output "PID:${pid_need}"
 #以下の無限ループのコードで確認できる
 while (1) {
     #余計なストリームを読み込まないで、適切なPIDのみを取得する。'-ss 5'の部分は何れ設定項目に加える(録画マージン+1)
-    $ts_stream=@(&"C:\DTV\ffmpeg\ffmpeg.exe" -hide_banner -ss 5 -i "C:\Users\sbn\Desktop\171029_インターミッション.ts" 2>&1 | ForEach-Object { $_ -replace "`r|`n","" } | Select-String -Encoding default -Pattern 'Video|Audio' -CaseSensitive)
+    $ts_stream=@(&"C:\DTV\ffmpeg\ffmpeg.exe" -hide_banner -nostats -ss 5 -i "C:\Users\sbn\Desktop\171029_インターミッション.ts" 2>&1 | ForEach-Object { $_ -replace "`r|`n","" } | Select-String -Encoding default -Pattern 'Video|Audio' -CaseSensitive)
     #カウントを0にリセット
     $cnt=0
     #
@@ -321,7 +321,7 @@ do {
     #ループカウント
     $cnt++
     Write-Output "エンコード回数:$cnt"
-} while (($ExitCode -eq 1) -And ($cnt -ls 25))
+} while (($ExitCode -eq 1) -And ($cnt -lt 25))
 
 #====================mp4ファイルサイズ判別====================
 #ffmpegの終了コード、mp4のファイルサイズによる条件分岐
