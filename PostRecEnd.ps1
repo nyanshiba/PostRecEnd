@@ -1,4 +1,4 @@
-#180522
+#180523
 #_EDCBX_HIDE_
 #視聴予約なら終了
 if ($env:RecMode -eq 4) { exit }
@@ -176,7 +176,7 @@ if ("${ts_del_toggle}" -eq "1") {
         #ts、同名のts.program.txt、ts.err削除
         Remove-Item -LiteralPath "${env:FolderPath}\${ts_del_name}.ts"
         Remove-Item -LiteralPath "${env:FolderPath}\${ts_del_name}.ts.program.txt"
-        Remove-Item -LiteralPath "${env:FolderPath}\${ts_del_name}.ts.err"
+        Remove-Item -LiteralPath "${env:FolderPath}\${ts_del_name}.err"
         Write-Output "削除:${ts_del_name}.ts、ts.program.txt、ts.err"
         #録画フォルダの合計サイズを取得
         $ts_folder_size=$(Get-ChildItem "${env:FolderPath}" | Measure-Object -Sum Length).Sum
@@ -252,9 +252,9 @@ Write-Output "audio_option:$audio_option"
 #====================PIDの判別====================
 #----------ドロップログ式----------
 #'VIDEO'でソートし'MPEG2 VIDEO'のPIDを見つける
-$pid_video=@(Select-String -Pattern 'VIDEO' "${env:FilePath}.err" | ForEach-Object { ($_.Line -split ' ')[1] })
+$pid_video=@(Select-String -Pattern 'VIDEO' -LiteralPath "${env:FilePath}.err" | ForEach-Object { ($_.Line -split ' ')[1] })
 #'MPEG2'でソートし'MPEG2 VIDEO'と'MPEG2 AAC'のPIDを見つける
-Select-String -Pattern 'MPEG2' "${env:FilePath}.err" | ForEach-Object {
+Select-String -Pattern 'MPEG2' -LiteralPath "${env:FilePath}.err" | ForEach-Object {
     #「'MPEG2 VIDEO'の2つ目([0]から数えて[1]つ目)のPID」が「'MPEG2 VIDEO'、'MPEG2 AAC'のPIDを順番に展開した時と一致」なら以降のPIDはゴミとみなし抜ける
     if ((($_.Line -split ' ')[1] -eq $pid_video[1]) -eq $True) {
         break
@@ -290,7 +290,7 @@ while (1) {
         if ($cnt -gt "1") {
             break
         }
-        #引数に追記
+        #引数に追記(求める形は0x0100ではなく0x100なのでこのまま使える訳ではない)
         $pid_need+=' -map i:0x'
         $pid_need+=$($a -split '0x|]')[1]
     }
@@ -329,7 +329,7 @@ if (($ExitCode -eq 1) -Or ($mp4_size -gt 10GB)) {
     #25回試行してもffmpegの終了コードが1、mp4が10GBより大きい場合、ts、ts.program.txt、ts.err、mp4を退避する
     Move-Item -LiteralPath "${env:FilePath}" "${err_folder_path}"
     Move-Item -LiteralPath "${env:FilePath}.program.txt" "${err_folder_path}"
-    Move-Item -LiteralPath "${env:FilePath}.ts.err" "${err_folder_path}"
+    Move-Item -LiteralPath "${env:FilePath}.err" "${err_folder_path}"
     Move-Item -LiteralPath "${tmp_folder_path}\${env:FileName}.mp4" "${err_folder_path}"
     Write-Output "エンコード失敗:ts=$([math]::round(${ts_size}/1GB,2))GB mp4=$([math]::round(${mp4_size}/1MB,0))MB"
     #ツイート警告
