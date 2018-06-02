@@ -1,4 +1,4 @@
-#180523
+#180603
 #_EDCBX_HIDE_
 #視聴予約なら終了
 if ($env:RecMode -eq 4) { exit }
@@ -177,7 +177,7 @@ if ("${ts_del_toggle}" -eq "1") {
         #ts、同名のts.program.txt、ts.err削除
         Remove-Item -LiteralPath "${env:FolderPath}\${ts_del_name}.ts"
         Remove-Item -LiteralPath "${env:FolderPath}\${ts_del_name}.ts.program.txt"
-        Remove-Item -LiteralPath "${env:FolderPath}\${ts_del_name}.err"
+        Remove-Item -LiteralPath "${env:FolderPath}\${ts_del_name}.ts.err"
         Write-Output "削除:${ts_del_name}.ts、ts.program.txt、ts.err"
         #録画フォルダの合計サイズを取得
         $ts_folder_size=$(Get-ChildItem "${env:FolderPath}" | Measure-Object -Sum Length).Sum
