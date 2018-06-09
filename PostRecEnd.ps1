@@ -1,4 +1,4 @@
-#180603
+#180610
 #_EDCBX_HIDE_
 #視聴予約なら終了
 if ($env:RecMode -eq 4) { exit }
@@ -6,6 +6,7 @@ if ($env:RecMode -eq 4) { exit }
 #====================動作条件====================
 <#
 ###EDCBの設定
+・指定サービスのみ録画:全サービスは対応していないかも、必要ないし
 ・番組情報を出力する:デュアルモノの判別
 ・ドロップログを出力する:PIDの判別
 ・録画情報保存フォルダを指定しない:場所が$env:FilePath(録画フォルダ)になっているため、要望があれば設定項目に加える
@@ -39,14 +40,14 @@ $ts_folder_max=100GB
 #0=無効、1=有効
 $mp4_del_toggle=1
 #backup and sync用フォルダの最大サイズを指定(0～8EB、単位:任意)
-$mp4_folder_max=20GB
+$mp4_folder_max=15GB
 #--------------------jpg出力--------------------
 #0=無効、1=有効
 $jpg_toggle=1
 #連番jpgを出力するフォルダ用のディレクトリ
 $jpg_path='C:\Users\sbn\Desktop\TVTest'
 #jpg出力したい自動予約キーワード(全てjpg出力したい場合は$jpg_addkey=''のようにして下さい)
-$jpg_addkey='フランキス|BEATLESS|エヴァーガーデン|夏目友人帳|キズナアイのBEATスクランブル|Lostorage|フルメタル|ソードアート'
+$jpg_addkey='フランキス|BEATLESS|夏目友人帳|キズナアイのBEATスクランブル'
 #jpg用ffmpeg引数(横pxが1440のとき、$scale=',scale=1920:1080'が使用可能)(ここの引数を弄ればpng等の別の出力を行うことも可能)
 function arg_jpg {
     $global:arg="-y -hide_banner -nostats -an -skip_frame nokey -i `"${env:FilePath}`" -vf yadif=0:-1:1,hqdn3d=4.0${scale} -f image2 -q:v 0 -vsync 0 `"${jpg_path}\${env:FileName}\%05d.jpg`""
@@ -71,7 +72,7 @@ $bas_folder_path='C:\DTV\backupandsync'
 $err_folder_path='C:\Users\sbn\Desktop'
 #mp4用ffmpeg引数
 function arg_mp4 {
-    $global:arg="-y -hide_banner -nostats -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf yadif=0:-1:1,hqdn3d,unsharp=3:3:2,scale=1280:720 -global_quality ${quality} -c:v h264_qsv -preset:v veryslow -g 300 -bf 16 -refs 9 -b_strategy 1 -look_ahead 1 -look_ahead_downsampling off -pix_fmt nv12 -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${pid_need} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
+    $global:arg="-y -hide_banner -nostats -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf yadif=0:-1:1,hqdn3d,unsharp=3:3:2,scale=1280:720 -global_quality ${quality} -c:v h264_qsv -preset:v veryslow -g 300 -bf 16 -refs 9 -b_strategy 1 -look_ahead 1 -pix_fmt nv12 -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${pid_need} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
 }
 #--------------------ツイート警告--------------------
 #0=無効、1=有効
@@ -246,24 +247,33 @@ Write-Output "quality:$quality"
 if ($(Get-Content -LiteralPath "${env:FilePath}.program.txt" | Select-String -SimpleMatch 'デュアルモノ' -quiet) -eq $True) {
     $audio_option='-c:a aac -b:a 128k -filter_complex channelsplit'
 } else {
-    $audio_option='-c:a aac -b:a 256k'
+    #$audio_option='-c:a aac -b:a 256k'
+    $audio_option='-c:a copy -bsf:a aac_adtstoasc'
 }
 Write-Output "audio_option:$audio_option"
 
 #====================PIDの判別====================
-#----------ドロップログ式----------
-#'VIDEO'でソートし'MPEG2 VIDEO'のPIDを見つける
-$pid_video=@(Select-String -Pattern 'VIDEO' -LiteralPath "${env:FilePath}.err" | ForEach-Object { ($_.Line -split ' ')[1] })
-#'MPEG2'でソートし'MPEG2 VIDEO'と'MPEG2 AAC'のPIDを見つける
-Select-String -Pattern 'MPEG2' -LiteralPath "${env:FilePath}.err" | ForEach-Object {
-    #「'MPEG2 VIDEO'の2つ目([0]から数えて[1]つ目)のPID」が「'MPEG2 VIDEO'、'MPEG2 AAC'のPIDを順番に展開した時と一致」なら以降のPIDはゴミとみなし抜ける
-    if ((($_.Line -split ' ')[1] -eq $pid_video[1]) -eq $True) {
-        break
+#----------ドロップログ式2----------
+#ドロップログには余計なストリームが入っている。余計な映像と音声が入っていた場合は対応していたが、余計な音声だけが入った場合に対応できていなかった。随分寝ぼけていたんだろう。
+#'MPEG2 VIDEO'のPIDを見つける
+Select-String -Pattern 'MPEG2 VIDEO' -LiteralPath "${env:FilePath}.err" | ForEach-Object {
+    #VIDEOはTotal:5000以上(余分なPIDを除去)
+    if (([int](-split $_.Line)[3] -ge 5000) -eq $True) {
+        #引数に追記
+        $pid_need+=' -map i:0x'
+        #0x0100じゃなくて0x100が欲しい
+        $pid_need+=($_.Line -split ' |0x')[2].SubString(1)
     }
-    #引数に追記
-    $pid_need+=' -map i:0x'
-    #0x0100じゃなくて0x100が欲しい
-    $pid_need+=($_.Line -split ' |0x')[2].SubString(1)
+}
+#'MPEG2 AAC'のPIDを見つける
+Select-String -Pattern 'MPEG2 AAC' -LiteralPath "${env:FilePath}.err" | ForEach-Object {
+    #AUDIOはTotal:500以上(余分なPIDを除去)
+    if (([int](-split $_.Line)[3] -ge 500) -eq $True) {
+        #引数に追記
+        $pid_need+=' -map i:0x'
+        #0x0110じゃなくて0x110が欲しい
+        $pid_need+=($_.Line -split ' |0x')[2].SubString(1)
+    }
 }
 Write-Output "PID:${pid_need}"
 
@@ -276,7 +286,7 @@ Write-Output "PID:${pid_need}"
 #同じコマンドに対して毎回違う出力を返すため、幸い求める出力が出る場合が多いことを利用し、最も多い配列を最終的な引数とするとか？
 #以下の無限ループのコードで確認できる
 while (1) {
-    #余計なストリームを読み込まないで、適切なPIDのみを取得する。'-ss 5'の部分は何れ設定項目に加える(録画マージン+1)
+    #余計なストリームを読み込まないで、適切なPIDのみを取得する。'-ss 5'の部分は何れ設定項目に加える(最低でも録画マージン+1)
     $ts_stream=@(&"C:\DTV\ffmpeg\ffmpeg.exe" -hide_banner -nostats -ss 5 -i "C:\Users\sbn\Desktop\171029_インターミッション.ts" 2>&1 | ForEach-Object { $_ -replace "`r|`n","" } | Select-String -Encoding default -Pattern 'Video|Audio' -CaseSensitive)
     #カウントを0にリセット
     $cnt=0
@@ -291,13 +301,14 @@ while (1) {
         if ($cnt -gt "1") {
             break
         }
-        #引数に追記(求める形は0x0100ではなく0x100なのでこのまま使える訳ではない)
+        #引数に追記
         $pid_need+=' -map i:0x'
         $pid_need+=$($a -split '0x|]')[1]
     }
     Write-Output "PID:${pid_need}"
     $pid_need=''
 }
+#ドロップログ式2みたいな感じでビットレートとかで切ったほうがいいけどそもそも文字列がまともに取得できない状態なので保留
 #>
 
 #====================エンコード====================
