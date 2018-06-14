@@ -1,4 +1,4 @@
-#180610
+#180614
 #_EDCBX_HIDE_
 #視聴予約なら終了
 if ($env:RecMode -eq 4) { exit }
@@ -8,7 +8,6 @@ if ($env:RecMode -eq 4) { exit }
 ###EDCBの設定
 ・指定サービスのみ録画:全サービスは対応していないかも、必要ないし
 ・番組情報を出力する:デュアルモノの判別
-・ドロップログを出力する:PIDの判別
 ・録画情報保存フォルダを指定しない:場所が$env:FilePath(録画フォルダ)になっているため、要望があれば設定項目に加える
 ・録画終了後のデフォルト動作:何もしない:Backup and Syncを動かすため
 ・録画後動作の抑制条件なし:自動エンコを録画中も実行しないと詰まる
@@ -72,7 +71,7 @@ $bas_folder_path='C:\DTV\backupandsync'
 $err_folder_path='C:\Users\sbn\Desktop'
 #mp4用ffmpeg引数
 function arg_mp4 {
-    $global:arg="-y -hide_banner -nostats -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf yadif=0:-1:1,hqdn3d,unsharp=3:3:2,scale=1280:720 -global_quality ${quality} -c:v h264_qsv -preset:v veryslow -g 300 -bf 16 -refs 9 -b_strategy 1 -look_ahead 1 -pix_fmt nv12 -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${pid_need} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
+    $global:arg="-y -hide_banner -nostats -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf yadif=0:-1:1,hqdn3d=6.0,unsharp=3:3:2,scale=1280:720 -global_quality ${quality} -c:v h264_qsv -preset:v veryslow -g 300 -bf 16 -refs 9 -b_strategy 1 -look_ahead 1 -pix_fmt nv12 -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${pid_need} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
 }
 #--------------------ツイート警告--------------------
 #0=無効、1=有効
@@ -253,63 +252,36 @@ if ($(Get-Content -LiteralPath "${env:FilePath}.program.txt" | Select-String -Si
 Write-Output "audio_option:$audio_option"
 
 #====================PIDの判別====================
-#----------ドロップログ式2----------
-#ドロップログには余計なストリームが入っている。余計な映像と音声が入っていた場合は対応していたが、余計な音声だけが入った場合に対応できていなかった。随分寝ぼけていたんだろう。
-#'MPEG2 VIDEO'のPIDを見つける
-Select-String -Pattern 'MPEG2 VIDEO' -LiteralPath "${env:FilePath}.err" | ForEach-Object {
-    #VIDEOはTotal:5000以上(余分なPIDを除去)
-    if (([int](-split $_.Line)[3] -ge 5000) -eq $True) {
-        #引数に追記
-        $pid_need+=' -map i:0x'
-        #0x0100じゃなくて0x100が欲しい
-        $pid_need+=($_.Line -split ' |0x')[2].SubString(1)
+#----------ffmpeg式----------
+#ドロップログ式ではまるでダメだった、ffmpeg式の出力も安定させた
+#余計なストリームを読み込まないで、適切なPIDのみを取得する。'-ss 10'の部分は何れ設定項目に加える(録画マージン+1)
+$StdErr=[string](&"${ffpath}\ffmpeg.exe" -hide_banner -nostats -ss 10 -i ${env:FilePath} 2>&1)
+#スペースを消す
+$StdErr=($StdErr -replace " ","")
+#CRを消す
+$StdErr=($StdErr -replace "`r","")
+#LFで分割して配列として格納
+$StdErr=($StdErr -split "`n")
+#配列を展開
+foreach ($a in $StdErr) {
+    #'NoProgram'が含まれる行以降の行は不要とみなし抜ける
+    if (($a -match 'NoProgram') -eq $True) {
+        break
     }
-}
-#'MPEG2 AAC'のPIDを見つける
-Select-String -Pattern 'MPEG2 AAC' -LiteralPath "${env:FilePath}.err" | ForEach-Object {
-    #AUDIOはTotal:500以上(余分なPIDを除去)
-    if (([int](-split $_.Line)[3] -ge 500) -eq $True) {
+    #'Video:'が含まれる行の場合は追記
+    if (($a -match 'Video:') -eq $True) {
         #引数に追記
         $pid_need+=' -map i:0x'
-        #0x0110じゃなくて0x110が欲しい
-        $pid_need+=($_.Line -split ' |0x')[2].SubString(1)
+        $pid_need+=($a -split '0x|]')[1]
+    }
+    #'Audio:'が含まれ、'0channels'が含まれない行の場合は追記
+    if ((($a -match 'Audio:') -eq $True) -And (($a -match '0channels') -eq $False)) {
+        #引数に追記
+        $pid_need+=' -map i:0x'
+        $pid_need+=($a -split '0x|]')[1]
     }
 }
 Write-Output "PID:${pid_need}"
-
-<#
-#----------ffmpeg式----------
-#180520
-#ドロップログを使いたくない(何れは番組情報ファイルも不要にしたい)ので、ffmpeg式でやりたかったんだけど、
-#文字コードとか改行コードが原因っぽいのは分かるが、色々弄ってみても成功率は変わるが挙動が変なのは変わらない。強い人がいたらお助け下さい。
-#[Console]::OutputEncoding = [Text.Encoding]::GetEncoding('shift_jis')
-#同じコマンドに対して毎回違う出力を返すため、幸い求める出力が出る場合が多いことを利用し、最も多い配列を最終的な引数とするとか？
-#以下の無限ループのコードで確認できる
-while (1) {
-    #余計なストリームを読み込まないで、適切なPIDのみを取得する。'-ss 5'の部分は何れ設定項目に加える(最低でも録画マージン+1)
-    $ts_stream=@(&"C:\DTV\ffmpeg\ffmpeg.exe" -hide_banner -nostats -ss 5 -i "C:\Users\sbn\Desktop\171029_インターミッション.ts" 2>&1 | ForEach-Object { $_ -replace "`r|`n","" } | Select-String -Encoding default -Pattern 'Video|Audio' -CaseSensitive)
-    #カウントを0にリセット
-    $cnt=0
-    #
-    foreach ($a in $ts_stream) {
-        #Write-Output $a
-        #'Video:'が含まれている場合はカウントアップ
-        if ($($a -match 'Video:') -eq $True) {
-            $cnt++
-        }
-        #'Video:'が1ストリーム以上あったら以降は不要とみなし抜ける
-        if ($cnt -gt "1") {
-            break
-        }
-        #引数に追記
-        $pid_need+=' -map i:0x'
-        $pid_need+=$($a -split '0x|]')[1]
-    }
-    Write-Output "PID:${pid_need}"
-    $pid_need=''
-}
-#ドロップログ式2みたいな感じでビットレートとかで切ったほうがいいけどそもそも文字列がまともに取得できない状態なので保留
-#>
 
 #====================エンコード====================
 #mp4用ffmpeg引数を遅延展開
