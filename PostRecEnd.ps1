@@ -1,4 +1,4 @@
-#180614
+#180615
 #_EDCBX_HIDE_
 #視聴予約なら終了
 if ($env:RecMode -eq 4) { exit }
@@ -67,7 +67,7 @@ $ffpath='C:\DTV\ffmpeg'
 $tmp_folder_path='C:\DTV\tmp'
 #backup and sync用ディレクトリ
 $bas_folder_path='C:\DTV\backupandsync'
-#25回試行してもffmpegの処理に失敗、mp4が10GBより大きい場合、tsファイル、番組情報ファイル、ドロップログ、エンコしたmp4ファイルを退避するディレクトリ
+#25回試行してもffmpegの処理に失敗、mp4が10GBより大きい場合、tsファイル、番組情報ファイル、エンコしたmp4ファイルを退避するディレクトリ
 $err_folder_path='C:\Users\sbn\Desktop'
 #mp4用ffmpeg引数
 function arg_mp4 {
@@ -174,11 +174,11 @@ if ("${ts_del_toggle}" -eq "1") {
         #録画フォルダ内の1番古いtsファイルのファイル名を取得
         #録画フォルダ内のtsファイルに対し、最終更新年月日でソートした1番最初にくるやつ、ファイル名(拡張子なし)を取得
         $ts_del_name=$(Get-ChildItem "${env:FolderPath}\*.ts" | Sort-Object LastWriteTime | Select-Object BaseName -First 1).BaseName
-        #ts、同名のts.program.txt、ts.err削除
+        #ts、同名のts.program.txt削除
         Remove-Item -LiteralPath "${env:FolderPath}\${ts_del_name}.ts"
         Remove-Item -LiteralPath "${env:FolderPath}\${ts_del_name}.ts.program.txt"
-        Remove-Item -LiteralPath "${env:FolderPath}\${ts_del_name}.ts.err"
-        Write-Output "削除:${ts_del_name}.ts、ts.program.txt、ts.err"
+        #Remove-Item -LiteralPath "${env:FolderPath}\${ts_del_name}.ts.err"
+        Write-Output "削除:${ts_del_name}.ts、ts.program.txt"
         #録画フォルダの合計サイズを取得
         $ts_folder_size=$(Get-ChildItem "${env:FolderPath}" | Measure-Object -Sum Length).Sum
         Write-Output "録画フォルダ:$([math]::round(${ts_folder_size}/1GB,2))GB"
@@ -246,16 +246,18 @@ Write-Output "quality:$quality"
 if ($(Get-Content -LiteralPath "${env:FilePath}.program.txt" | Select-String -SimpleMatch 'デュアルモノ' -quiet) -eq $True) {
     $audio_option='-c:a aac -b:a 128k -filter_complex channelsplit'
 } else {
-    #$audio_option='-c:a aac -b:a 256k'
-    $audio_option='-c:a copy -bsf:a aac_adtstoasc'
+    $audio_option='-c:a aac -b:a 256k'
+    #$audio_option='-c:a copy -bsf:a aac_adtstoasc'
 }
 Write-Output "audio_option:$audio_option"
 
 #====================PIDの判別====================
+#----------ドロップログ式----------
+#まるで役割を果たしていなかった
 #----------ffmpeg式----------
-#ドロップログ式ではまるでダメだった、ffmpeg式の出力も安定させた
-#余計なストリームを読み込まないで、適切なPIDのみを取得する。'-ss 10'の部分は何れ設定項目に加える(録画マージン+1)
-$StdErr=[string](&"${ffpath}\ffmpeg.exe" -hide_banner -nostats -ss 10 -i ${env:FilePath} 2>&1)
+#出力を安定させた
+#余計なストリームを読み込まないで、適切なPIDのみを取得する。
+$StdErr=[string](&"${ffpath}\ffmpeg.exe" -hide_banner -nostats -ss 10 -i "${env:FilePath}" 2>&1)
 #スペースを消す
 $StdErr=($StdErr -replace " ","")
 #CRを消す
@@ -310,10 +312,10 @@ do {
 #====================mp4ファイルサイズ判別====================
 #ffmpegの終了コード、mp4のファイルサイズによる条件分岐
 if (($ExitCode -eq 1) -Or ($mp4_size -gt 10GB)) {
-    #25回試行してもffmpegの終了コードが1、mp4が10GBより大きい場合、ts、ts.program.txt、ts.err、mp4を退避する
+    #25回試行してもffmpegの終了コードが1、mp4が10GBより大きい場合、ts、ts.program.txt、mp4を退避する
     Move-Item -LiteralPath "${env:FilePath}" "${err_folder_path}"
     Move-Item -LiteralPath "${env:FilePath}.program.txt" "${err_folder_path}"
-    Move-Item -LiteralPath "${env:FilePath}.err" "${err_folder_path}"
+    #Move-Item -LiteralPath "${env:FilePath}.err" "${err_folder_path}"
     Move-Item -LiteralPath "${tmp_folder_path}\${env:FileName}.mp4" "${err_folder_path}"
     Write-Output "エンコード失敗:ts=$([math]::round(${ts_size}/1GB,2))GB mp4=$([math]::round(${mp4_size}/1MB,0))MB"
     #ツイート警告
