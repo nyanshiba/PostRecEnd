@@ -1,4 +1,4 @@
-#180617
+#180618
 #_EDCBX_HIDE_
 #視聴予約なら終了
 if ($env:RecMode -eq 4) { exit }
@@ -282,8 +282,8 @@ $StdErr=($StdErr -replace "`r","")
 $StdErr=($StdErr -split "`n")
 #配列を展開
 foreach ($a in $StdErr) {
-    #'Video:'か'Audio:'が含まれ、且つ'Couldnotfindcodecparameters'か'0x2'が含まれない行の場合のみ実行
-    if ((($a -match 'Video:|Audio:') -eq $True) -And (($a -match 'Couldnotfindcodecparameters|0x2') -eq $False)) {
+    #'Video:'か'Audio:'が含まれ、且つ'Couldnotfindcodecparameters'か'0x2'か'0channels'が含まれない行の場合のみ実行
+    if ((($a -match 'Video:|Audio:') -eq $True) -And (($a -match 'Couldnotfindcodecparameters|0x2|0channels') -eq $False)) {
         #引数に追記
         $pid_need+=' -map i:0x'
         #PIDの部分だけ切り取り
