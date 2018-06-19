@@ -63,7 +63,7 @@ function arg_jpg {
 }
 #--------------------tsファイルサイズ判別--------------------
 #通常品質
-$quality_normal=28
+$quality_normal=27
 #0=無効(通常品質のみ使用)、1=有効(通常・低品質を閾値を元に切り替える)
 $tssize_toggle=1
 #閾値
@@ -220,7 +220,7 @@ if ("${mp4_del_toggle}" -eq "1") {
 
 #====================jpg出力====================
 #jpg出力機能が有効(jpg_toggle=1)且つenv:Addkey(自動予約時のキーワード)にjpg_addkey(指定の文字)が含まれている場合は連番jpgも出力
-if ("$jpg_toggle" -eq "1") -And ("$env:Addkey" -match "$jpg_addkey") {
+if (("$jpg_toggle" -eq "1") -And ("$env:Addkey" -match "$jpg_addkey")) {
     #出力フォルダ作成
     New-Item "${jpg_path}\${env:FileName}" -ItemType Directory
     Write-Output "jpg出力:${env:FileName}.ts"
