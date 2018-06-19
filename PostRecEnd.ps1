@@ -1,4 +1,4 @@
-#180618
+#180619
 #_EDCBX_HIDE_
 #視聴予約なら終了
 if ($env:RecMode -eq 4) { exit }
@@ -94,7 +94,6 @@ $tweet_rb_path='C:\DTV\EDCB\tweet.rb'
 $env:ssl_cert_file='C:\DTV\EDCB\cacert.pem'
 
 
-
 #====================NotifyIcon====================
 #System.Windows.FormsクラスをPowerShellセッションに追加
 Add-Type -AssemblyName System.Windows.Forms
@@ -117,7 +116,7 @@ function BalloonTip {
         #表示するタイトル
         $balloon.BalloonTipTitle="エンコード${enc_result}"
         #表示するメッセージ
-        $balloon.BalloonTipText="${env:FileName}`nts:$([math]::round(${ts_size}/1GB,2))GB mp4:$([math]::round(${mp4_size}/1MB,0))MB`n$err_detail"
+        $balloon.BalloonTipText="${env:FileName}`nts:$([math]::round(${ts_size}/1GB,2))GB mp4:$([math]::round(${mp4_size}/1MB,0))MB${err_detail}"
         #balloontip_toggle=1なら5000ミリ秒バルーンチップ表示
         $balloon.ShowBalloonTip(5000)
         #5秒待って
@@ -163,7 +162,6 @@ function ffprocess {
     #プロセスの標準エラー出力をシェルの標準出力に出力
     Write-Output $StdErr
 }
-
 
 
 #====================ログ====================
@@ -222,7 +220,7 @@ if ("${mp4_del_toggle}" -eq "1") {
 
 #====================jpg出力====================
 #jpg出力機能が有効(jpg_toggle=1)且つenv:Addkey(自動予約時のキーワード)にjpg_addkey(指定の文字)が含まれている場合は連番jpgも出力
-if (("${jpg_toggle}" -eq "1") -And ($("${env:Addkey}" -match "${jpg_addkey}") -eq $True)) {
+if ("$jpg_toggle" -eq "1") -And ("$env:Addkey" -match "$jpg_addkey") {
     #出力フォルダ作成
     New-Item "${jpg_path}\${env:FileName}" -ItemType Directory
     Write-Output "jpg出力:${env:FileName}.ts"
@@ -238,7 +236,6 @@ if (("${jpg_toggle}" -eq "1") -And ($("${env:Addkey}" -match "${jpg_addkey}") -e
     #ffmpegprocessを起動
     ffprocess
 }
-
 
 
 #====================tsファイルサイズ判別====================
@@ -258,7 +255,7 @@ Write-Output "quality:$quality"
 
 #====================デュアルモノの判別====================
 #番組情報ファイルがありデュアルモノという文字列があればTrue、文字列がない場合はFalse、番組情報ファイルが無ければNull
-if ($(Get-Content -LiteralPath "${env:FilePath}.program.txt" | Select-String -SimpleMatch 'デュアルモノ' -quiet) -eq $True) {
+if (Get-Content -LiteralPath "${env:FilePath}.program.txt" | Select-String -SimpleMatch 'デュアルモノ' -quiet) {
     $audio_option='-c:a aac -b:a 128k -filter_complex channelsplit'
 } else {
     #$audio_option='-c:a aac -b:a 256k'
@@ -268,22 +265,40 @@ Write-Output "audio_option:$audio_option"
 
 #====================PIDの判別====================
 #前の番組の音声や映像のPIDを引数に入れないため
-#----------ドロップログ式----------
-#まるで役割を果たしていなかった
-#----------ffmpeg式----------
-#出力を安定させた
 #-analyzeduration 30M -probesize 100Mで適切にストリームを読み込む
 $StdErr=[string](&"${ffpath}\ffmpeg.exe" -hide_banner -nostats -analyzeduration 30M -probesize 100M -i "${env:FilePath}" 2>&1)
-#スペースを消す
+#スペース、CRを消す
 $StdErr=($StdErr -replace " ","")
-#CRを消す
 $StdErr=($StdErr -replace "`r","")
+#if x480だけの場合はx480、else x1080だけ・x480とx1080がある場合はx1080
+if (($StdErr -match 'x480') -And ($StdErr -notmatch 'x1080')) {
+    $res_need='x480'
+} else {
+    $res_need='x1080'
+}
 #LFで分割して配列として格納
 $StdErr=($StdErr -split "`n")
-#配列を展開
+#配列を展開(映像)
 foreach ($a in $StdErr) {
-    #'Video:'か'Audio:'が含まれ、且つ'Couldnotfindcodecparameters'か'0x2'か'0channels'が含まれない行の場合のみ実行
-    if ((($a -match 'Video:|Audio:') -eq $True) -And (($a -match 'Couldnotfindcodecparameters|0x2|0channels') -eq $False)) {
+    #"Video:"and"${res_need}"が含まれ、'none'が含まれない行の場合実行
+    if (($a -match "^(?=.*Video:)(?=.*${res_need})") -And ($a -notmatch 'none')) {
+        #引数に追記
+        $pid_need+=' -map i:0x'
+        #PIDの部分だけ切り取り
+        $pid_need+=($a -split '0x|]')[1]
+    }
+}
+#0x1なら音声も0x1**を選ぶ
+#0x2なら音声も0x2**を選ぶ
+if ("$pid_need" -match '0x1') {
+    $audio_need='0x1'
+} elseif ("$pid_need" -match '0x2') {
+    $audio_need='0x2'
+}
+#配列を展開(音声)
+foreach ($a in $StdErr) {
+    #"Audio:"and"${audio_need}"が含まれ、'0channels'が含まれない行の場合実行
+    if (($a -match "^(?=.*Audio:)(?=.*${audio_need})") -And ($a -notmatch '0channels')) {
         #引数に追記
         $pid_need+=' -map i:0x'
         #PIDの部分だけ切り取り
@@ -333,24 +348,24 @@ if (($ExitCode -eq 1) -Or ($mp4_size -gt 10GB)) {
         #$StdErrをソートし分岐
         switch ($StdErr) {
             #そもそもtsファイル無いやんけ
-            {$_ -match 'Nosuchfileordirectory'} {$err_detail+=' No such file or directory.'}
+            {$_ -match 'Nosuchfileordirectory'} {$err_detail+="`nNo such file or directory."}
             #mp4が10GBより大きくなっちゃったよ
-            {$mp4_size -gt 10GB} {$err_detail+=' [googledrive] Can not upload because it exceeds 10GB.'}
+            {$mp4_size -gt 10GB} {$err_detail+="`n[googledrive] Can not upload because it exceeds 10GB."}
             #PID判別に失敗して余分なストリームが紛れ込んだか、引数の-analyzedurationと-probesizeが足りず解析できないか
-            {$_ -match 'Couldnotfindcodecparameters'} {$err_detail+=' [mpegts] Could not find codec parameters.'}
+            {$_ -match 'Couldnotfindcodecparameters'} {$err_detail+="`n[mpegts] Could not find codec parameters."}
             #デュアルモノ-filter_complex channelsplit失敗？ffmpeg4.0で起こることを確認
-            {$_ -match 'Unsupportedchannellayout'} {$err_detail+=' [aac] Unsupported channel layout.'}
+            {$_ -match 'Unsupportedchannellayout'} {$err_detail+="`n[aac] Unsupported channel layout."}
             #25回ループしてもQSVの機嫌は戻らなかった、CPUスペックに対して背伸びした引数でないことを確認
-            {$_ -match 'Errorduringencoding:devicefailed'} {$err_detail+=' [h264_qsv] Error during encoding: device failed (-17).'}
+            {$_ -match 'Errorduringencoding:devicefailed'} {$err_detail+="`n[h264_qsv] Error during encoding: device failed (-17)."}
             #ADTSのフレームヘッダ解析エラーは恐らく問題ない ExitCode:0
             #{$_ -match 'ErrorparsingADTSframeheader'} {$err_detail+='[AVBSFContext] Error parsing ADTS frame header!.'}
             #おま環
-            default {$err_detail+=' Unknown.'}
+            default {$err_detail+="`nUnknown."}
         }
     }
     #ツイート警告
     if ("${tweet_toggle}" -eq "1") {
-        $env:tweet_content="Error:${env:FileName}.ts`n$err_detail"
+        $env:tweet_content="Error:${env:FileName}.ts${err_detail}"
         &"${ruby_path}" "${tweet_rb_path}"
         #Start-Process "${ruby_path}" "${tweet_rb_path}" -WindowStyle Hidden -Wait
     }
