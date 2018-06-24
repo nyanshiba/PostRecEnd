@@ -1,7 +1,9 @@
-#180619
+#180624
 #_EDCBX_HIDE_
 #視聴予約なら終了
 if ($env:RecMode -eq 4) { exit }
+#Powershellプロセスの優先度を高に
+#(Get-Process -Id $pid).PriorityClass='High'
 
 <#
 ##EDCBの設定
@@ -81,7 +83,7 @@ $bas_folder_path='C:\DTV\backupandsync'
 $err_folder_path='C:\Users\sbn\Desktop'
 #mp4用ffmpeg引数
 function arg_mp4 {
-    $global:arg="-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf yadif=0:-1:1,hqdn3d=6.0,unsharp=3:3:2,scale=1280:720 -global_quality ${quality} -c:v h264_qsv -preset:v veryslow -g 300 -bf 16 -refs 9 -b_strategy 1 -look_ahead 1 -pix_fmt nv12 -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${pid_need} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
+    $global:arg="-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf yadif=0:-1:1,hqdn3d=6.0,unsharp=3:3:2:3:3:2:0,scale=1280:720 -global_quality ${quality} -c:v h264_qsv -preset:v veryslow -g 300 -bf 16 -refs 9 -b_strategy 1 -look_ahead 1 -pix_fmt nv12 -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${pid_need} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
 }
 #--------------------ツイート警告--------------------
 #0=無効、1=有効
@@ -122,7 +124,7 @@ function BalloonTip {
         #5秒待って
         Start-Sleep -Seconds 5
     }
-    #タスクトレイアイコン非表示
+    #タスクトレイアイコン非表示(異常終了時は実行されずトレイに亡霊が残る仕様)
     $balloon.Visible=$False
 }
 
@@ -151,6 +153,8 @@ function ffprocess {
     $p.StartInfo=$psi
     #プロセス開始
     $p.Start() | Out-Null
+    #プロセス優先度を高に
+    (Get-Process -Id $p.Id).PriorityClass='High'
     #プロセスの標準エラー出力を変数に格納(注意:WaitForExitの前に書かないとデッドロックします)
     $global:StdErr=$p.StandardError.ReadToEnd()
     #プロセス終了まで待機
@@ -316,8 +320,7 @@ Write-Output "Arguments:$arg"
 #カウントを0にリセット
 $cnt=0
 
-#終了コードが1且つループカウントが25未満までの間、エンコードを試みる
-#5秒26回のループでは足りないことを確認
+#終了コードが1且つループカウントが10未満までの間、エンコードを試みる
 do {
     #録画の開始終了のビジー時を避ける、再試行の効果を出すためにちょっと待つ
     Start-Sleep -s 10
@@ -330,7 +333,7 @@ do {
     #ループカウント
     $cnt++
     Write-Output "エンコード回数:$cnt"
-} while (($ExitCode -eq 1) -And ($cnt -lt 25))
+} while (($ExitCode -eq 1) -And ($cnt -lt 10))
 
 #====================mp4ファイルサイズ判別====================
 #ffmpegの終了コード、mp4のファイルサイズによる条件分岐
