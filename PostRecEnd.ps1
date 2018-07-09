@@ -1,4 +1,4 @@
-#180624
+#180710
 #_EDCBX_HIDE_
 #視聴予約なら終了
 if ($env:RecMode -eq 4) { exit }
@@ -27,7 +27,7 @@ if ($env:RecMode -eq 4) { exit }
 ・[mpegts] Could not find codec parameters. PID判別に失敗して余分なストリームが紛れ込んだか、引数の-analyzedurationと-probesizeが足りず解析できないか
 ・[aac] Unsupported channel layout. デュアルモノ-filter_complex channelsplit失敗？ffmpeg4.0で起こることを確認
 ・[AVBSFContext] Error parsing ADTS frame header!. ADTSのフレームヘッダ解析エラーは恐らく問題ない ExitCode:0
-・[h264_qsv] Error during encoding: device failed (-17). 25回ループしてもQSVの機嫌は戻らなかった、CPUスペックに対して背伸びした引数でないことを確認
+・[h264_qsv] Error during encoding: device failed (-17). ループしてもQSVの機嫌は戻らなかった、CPUスペックに対して背伸びした引数でないことを確認
 ・Unknown. おま環
 #>
 
@@ -46,7 +46,7 @@ $logcnt_max=1000
 #0=無効、1=有効
 $ts_del_toggle=1
 #録画フォルダの最大サイズを指定(0～8EB、単位:任意)
-$ts_folder_max=100GB
+$ts_folder_max=50GB
 #--------------------mp4フォルダサイズを一定に保つファイルの削除--------------------
 #0=無効、1=有効
 $mp4_del_toggle=1
@@ -61,7 +61,7 @@ $jpg_path='C:\Users\sbn\Desktop\TVTest'
 $jpg_addkey='フランキス|BEATLESS|夏目友人帳|キズナアイのBEATスクランブル'
 #jpg用ffmpeg引数(横pxが1440のとき、$scale=',scale=1920:1080'が使用可能)(ここの引数を弄ればpng等の別の出力を行うことも可能)
 function arg_jpg {
-    $global:arg="-y -hide_banner -nostats -an -skip_frame nokey -i `"${env:FilePath}`" -vf yadif=0:-1:1,hqdn3d=4.0${scale} -f image2 -q:v 0 -vsync 0 `"${jpg_path}\${env:FileName}\%05d.jpg`""
+    $script:arg="-y -hide_banner -nostats -an -skip_frame nokey -i `"${env:FilePath}`" -vf yadif=0:-1:1,hqdn3d=4.0${scale} -f image2 -q:v 0 -vsync 0 `"${jpg_path}\${env:FileName}\%05d.jpg`""
 }
 #--------------------tsファイルサイズ判別--------------------
 #通常品質
@@ -83,7 +83,7 @@ $bas_folder_path='C:\DTV\backupandsync'
 $err_folder_path='C:\Users\sbn\Desktop'
 #mp4用ffmpeg引数
 function arg_mp4 {
-    $global:arg="-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf yadif=0:-1:1,hqdn3d=6.0,unsharp=3:3:2:3:3:2:0,scale=1280:720 -global_quality ${quality} -c:v h264_qsv -preset:v veryslow -g 300 -bf 16 -refs 9 -b_strategy 1 -look_ahead 1 -pix_fmt nv12 -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${pid_need} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
+    $script:arg="-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf yadif=0:-1:1,pp=ac,unsharp=3:3:2:3:3:2:0,scale=1280:720 -global_quality ${quality} -c:v h264_qsv -preset:v veryslow -g 15 -bf 2 -refs 4 -b_strategy 1 -look_ahead 1 -look_ahead_downsampling off -pix_fmt nv12 -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${pid_need} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
 }
 #--------------------ツイート警告--------------------
 #0=無効、1=有効
@@ -103,8 +103,8 @@ Add-Type -AssemblyName System.Windows.Forms
 $balloon=New-Object System.Windows.Forms.NotifyIcon
 #powershellのアイコンを使用
 $balloon.Icon=[System.Drawing.Icon]::ExtractAssociatedIcon('C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe')
-#タスクトレイアイコンのヒントにファイル名を表示
-$balloon.Text=$MyInvocation.MyCommand.Name + ":${env:FileName}.ts"
+#タスクトレイアイコンのヒントにファイル名を表示(0文字目から63文字目まで)
+$balloon.Text=($MyInvocation.MyCommand.Name + ":${env:FileName}.ts").SubString(0,63)
 #タスクトレイアイコン表示
 $balloon.Visible=$True
 #ファイル名をタイトルバーに表示
@@ -155,16 +155,15 @@ function ffprocess {
     $p.Start() | Out-Null
     #プロセス優先度を高に
     (Get-Process -Id $p.Id).PriorityClass='High'
+    #Write-Output $p.Id
     #プロセスの標準エラー出力を変数に格納(注意:WaitForExitの前に書かないとデッドロックします)
-    $global:StdErr=$p.StandardError.ReadToEnd()
+    $script:StdErr=$p.StandardError.ReadToEnd()
     #プロセス終了まで待機
     $p.WaitForExit()
     #終了コードを変数に格納
-    $global:ExitCode=$p.ExitCode
+    $script:ExitCode=$p.ExitCode
     #リソースを開放
     $p.Close()
-    #プロセスの標準エラー出力をシェルの標準出力に出力
-    Write-Output $StdErr
 }
 
 
@@ -313,27 +312,37 @@ Write-Output "PID:${pid_need}"
 
 
 #====================エンコード====================
-#mp4用ffmpeg引数を遅延展開
+#プロセス開始用の変数
 $file="${ffpath}\ffmpeg.exe"
+#mp4用ffmpeg引数を遅延展開
 arg_mp4
-Write-Output "Arguments:$arg"
+#エンコードに使用する引数を表示
+Write-Output "Arguments:ffmpeg $arg"
 #カウントを0にリセット
 $cnt=0
-
-#終了コードが1且つループカウントが10未満までの間、エンコードを試みる
+#終了コードが1且つループカウントが50未満までの間、エンコードを試みる
 do {
-    #録画の開始終了のビジー時を避ける、再試行の効果を出すためにちょっと待つ
-    Start-Sleep -s 10
-    #ffmpegprocessを起動
-    ffprocess
-    Write-Output "ExitCode:$ExitCode"
-    #エンコ後mp4のサイズを取得
-    $mp4_size=$(Get-ChildItem -LiteralPath "${tmp_folder_path}\${env:FileName}.mp4").Length
-    Write-Output "mp4:$([math]::round(${mp4_size}/1MB,0))MB"
     #ループカウント
     $cnt++
-    Write-Output "エンコード回数:$cnt"
-} while (($ExitCode -eq 1) -And ($cnt -lt 10))
+    #再試行時のクールタイム
+    if (($cnt -ge 2) -And ($cnt -lt 25)) {
+        Start-Sleep -s 30
+    }
+    #エンコ
+    ffprocess
+    #エンコ回数が1以下か、終了コードが0の場合実行(何度もループした場合にログが肥大しないため)
+    #whileの後に書くのもありだけど
+    if (($cnt -le 1) -Or ($ExitCode -eq 0)) {
+        #プロセスの標準エラー出力をシェルの標準出力に出力
+        Write-Output $StdErr
+        #エンコ後mp4のサイズを出力
+        $mp4_size=$(Get-ChildItem -LiteralPath "${tmp_folder_path}\${env:FileName}.mp4").Length
+        Write-Output "mp4:$([math]::round(${mp4_size}/1MB,0))MB"
+    }
+} while (($ExitCode -eq 1) -And ($cnt -lt 50))
+#最終的なエンコード回数、終了コードを追記
+Write-Output "エンコード回数:$cnt"
+Write-Output "ExitCode:$ExitCode"
 
 #====================mp4ファイルサイズ判別====================
 #ffmpegの終了コード、mp4のファイルサイズによる条件分岐
@@ -354,16 +363,16 @@ if (($ExitCode -eq 1) -Or ($mp4_size -gt 10GB)) {
             {$_ -match 'Nosuchfileordirectory'} {$err_detail+="`nNo such file or directory."}
             #mp4が10GBより大きくなっちゃったよ
             {$mp4_size -gt 10GB} {$err_detail+="`n[googledrive] Can not upload because it exceeds 10GB."}
+            #25回ループしてもQSVの機嫌は戻らなかった、CPUスペックに対して背伸びした引数でないことを確認
+            {$_ -match 'Errorduringencoding:devicefailed'} {$err_detail+="`n[h264_qsv] Error during encoding: device failed (-17)."}
             #PID判別に失敗して余分なストリームが紛れ込んだか、引数の-analyzedurationと-probesizeが足りず解析できないか
             {$_ -match 'Couldnotfindcodecparameters'} {$err_detail+="`n[mpegts] Could not find codec parameters."}
             #デュアルモノ-filter_complex channelsplit失敗？ffmpeg4.0で起こることを確認
             {$_ -match 'Unsupportedchannellayout'} {$err_detail+="`n[aac] Unsupported channel layout."}
-            #25回ループしてもQSVの機嫌は戻らなかった、CPUスペックに対して背伸びした引数でないことを確認
-            {$_ -match 'Errorduringencoding:devicefailed'} {$err_detail+="`n[h264_qsv] Error during encoding: device failed (-17)."}
             #ADTSのフレームヘッダ解析エラーは恐らく問題ない ExitCode:0
             #{$_ -match 'ErrorparsingADTSframeheader'} {$err_detail+='[AVBSFContext] Error parsing ADTS frame header!.'}
             #おま環
-            default {$err_detail+="`nUnknown."}
+            default {$err_detail="`nUnknown."}
         }
     }
     #ツイート警告
