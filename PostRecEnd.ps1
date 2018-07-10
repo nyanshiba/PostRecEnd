@@ -103,8 +103,13 @@ Add-Type -AssemblyName System.Windows.Forms
 $balloon=New-Object System.Windows.Forms.NotifyIcon
 #powershellのアイコンを使用
 $balloon.Icon=[System.Drawing.Icon]::ExtractAssociatedIcon('C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe')
-#タスクトレイアイコンのヒントにファイル名を表示(0文字目から63文字目まで)
-$balloon.Text=($MyInvocation.MyCommand.Name + ":${env:FileName}.ts").SubString(0,63)
+#タスクトレイアイコンのヒントにファイル名を表示
+#NotifyIcon.Textが64文字を超えると例外、String.Substringの開始値~終了値が文字数を超えると例外
+switch (([string]($MyInvocation.MyCommand.Name) + ":${env:FileName}.ts").Length) {
+    {$_ -ge 64} {$TextLength="63"}
+    {$_ -lt 64} {$TextLength="$_"}
+}
+$balloon.Text=([string]($MyInvocation.MyCommand.Name) + ":${env:FileName}.ts").SubString(0,$TextLength)
 #タスクトレイアイコン表示
 $balloon.Visible=$True
 #ファイル名をタイトルバーに表示
