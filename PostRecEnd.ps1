@@ -1,4 +1,4 @@
-#180710
+#180711
 #_EDCBX_HIDE_
 #視聴予約なら終了
 if ($env:RecMode -eq 4) { exit }
@@ -85,7 +85,7 @@ $err_folder_path='C:\Users\sbn\Desktop'
 function arg_mp4 {
     $script:arg="-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf yadif=0:-1:1,pp=ac,unsharp=3:3:2:3:3:2:0,scale=1280:720 -global_quality ${quality} -c:v h264_qsv -preset:v veryslow -g 15 -bf 2 -refs 4 -b_strategy 1 -look_ahead 1 -look_ahead_downsampling off -pix_fmt nv12 -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${pid_need} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
 }
-#--------------------ツイート警告--------------------
+#--------------------Twitter--------------------
 #0=無効、1=有効
 $tweet_toggle=1
 #ruby.exe
@@ -94,6 +94,11 @@ $ruby_path='C:\Ruby25-x64\bin\ruby.exe'
 $tweet_rb_path='C:\DTV\EDCB\tweet.rb'
 #SSL証明書(環境変数)
 $env:ssl_cert_file='C:\DTV\EDCB\cacert.pem'
+#--------------------Discord--------------------
+#0=無効、1=有効
+$discord_toggle=1
+#webhook url
+$hookUrl = 'https://discordapp.com/api/webhooks/XXXXXXXXXX'
 
 
 #====================NotifyIcon====================
@@ -325,13 +330,13 @@ arg_mp4
 Write-Output "Arguments:ffmpeg $arg"
 #カウントを0にリセット
 $cnt=0
-#終了コードが1且つループカウントが50未満までの間、エンコードを試みる
+#終了コードが1且つループカウントが10未満までの間、エンコードを試みる
 do {
     #ループカウント
     $cnt++
     #再試行時のクールタイム
-    if (($cnt -ge 2) -And ($cnt -lt 25)) {
-        Start-Sleep -s 30
+    if (($cnt -ge 2) -And ($cnt -lt 5)) {
+        Start-Sleep -s 60
     }
     #エンコ
     ffprocess
@@ -344,7 +349,7 @@ do {
         $mp4_size=$(Get-ChildItem -LiteralPath "${tmp_folder_path}\${env:FileName}.mp4").Length
         Write-Output "mp4:$([math]::round(${mp4_size}/1MB,0))MB"
     }
-} while (($ExitCode -eq 1) -And ($cnt -lt 50))
+} while (($ExitCode -eq 1) -And ($cnt -lt 10))
 #最終的なエンコード回数、終了コードを追記
 Write-Output "エンコード回数:$cnt"
 Write-Output "ExitCode:$ExitCode"
@@ -380,11 +385,21 @@ if (($ExitCode -eq 1) -Or ($mp4_size -gt 10GB)) {
             default {$err_detail="`nUnknown."}
         }
     }
-    #ツイート警告
+    #投稿内容
+    $env:content="Error:${env:FileName}.ts`n${err_detail}"
+    #Twitter警告
     if ("${tweet_toggle}" -eq "1") {
-        $env:tweet_content="Error:${env:FileName}.ts${err_detail}"
         &"${ruby_path}" "${tweet_rb_path}"
         #Start-Process "${ruby_path}" "${tweet_rb_path}" -WindowStyle Hidden -Wait
+    }
+    #Discord警告
+    if ("${discord_toggle}" -eq "1") {
+        $payload=[PSCustomObject]@{
+            content = $env:content
+        }
+        $payload=($payload | ConvertTo-Json)
+        $payload=[System.Text.Encoding]::UTF8.GetBytes($payload)
+        Invoke-RestMethod -Uri $hookUrl -Method Post -Body $payload
     }
     #NotifyIcon
     $ToolTipIcon='Error'
