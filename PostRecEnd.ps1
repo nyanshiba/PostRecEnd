@@ -1,4 +1,4 @@
-#180711
+#180713
 #_EDCBX_HIDE_
 #視聴予約なら終了
 if ($env:RecMode -eq 4) { exit }
@@ -65,13 +65,13 @@ function arg_jpg {
 }
 #--------------------tsファイルサイズ判別--------------------
 #通常品質
-$quality_normal=27
+$quality_normal=29
 #0=無効(通常品質のみ使用)、1=有効(通常・低品質を閾値を元に切り替える)
 $tssize_toggle=1
 #閾値
 $tssize_max=20GB
 #低品質
-$quality_low=30
+$quality_low=32
 #--------------------エンコード--------------------
 #ffmpeg.exe、ffprobe.exeがあるディレクトリ
 $ffpath='C:\DTV\ffmpeg'
@@ -83,7 +83,7 @@ $bas_folder_path='C:\DTV\backupandsync'
 $err_folder_path='C:\Users\sbn\Desktop'
 #mp4用ffmpeg引数
 function arg_mp4 {
-    $script:arg="-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf yadif=0:-1:1,pp=ac,unsharp=3:3:2:3:3:2:0,scale=1280:720 -global_quality ${quality} -c:v h264_qsv -preset:v veryslow -g 15 -bf 2 -refs 4 -b_strategy 1 -look_ahead 1 -look_ahead_downsampling off -pix_fmt nv12 -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${pid_need} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
+    $script:arg="-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf bwdif=0:-1:1,pp=ac -global_quality ${quality} -c:v h264_qsv -preset:v veryslow -g 15 -bf 2 -refs 4 -b_strategy 1 -look_ahead 1 -look_ahead_depth 60 -pix_fmt nv12 -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${pid_need} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
 }
 #--------------------Twitter--------------------
 #0=無効、1=有効
