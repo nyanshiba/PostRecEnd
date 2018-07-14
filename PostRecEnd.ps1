@@ -1,4 +1,4 @@
-#180713
+#180714
 #_EDCBX_HIDE_
 #視聴予約なら終了
 if ($env:RecMode -eq 4) { exit }
@@ -182,6 +182,9 @@ function ffprocess {
 if ("${log_toggle}" -eq "1") {
     #ログ取り開始
     Start-Transcript -LiteralPath "${log_path}\${env:FileName}.txt"
+    #録画用アプリの起動数を取得
+    $RecCount=(Get-Process -ErrorAction 0 'EpgDataCap_bon').Count
+    Write-Output "同時録画数:$RecCount"
     #Get-ChildItemでログフォルダのtxtファイルを取得、更新日降順でソートし、logcnt_max個飛ばし、ForEach-ObjectでRemove-Itemループ
     Get-ChildItem "${log_path}\*.txt" | Sort-Object LastWriteTime -Descending | Select-Object -Skip ${logcnt_max} | ForEach-Object {
         Remove-Item -LiteralPath "$_"
@@ -386,7 +389,7 @@ if (($ExitCode -eq 1) -Or ($mp4_size -gt 10GB)) {
         }
     }
     #投稿内容
-    $env:content="Error:${env:FileName}.ts`n${err_detail}"
+    $env:content="Error:${env:FileName}.ts`n${err_detail}`n同時録画数:$RecCount"
     #Twitter警告
     if ("${tweet_toggle}" -eq "1") {
         &"${ruby_path}" "${tweet_rb_path}"
