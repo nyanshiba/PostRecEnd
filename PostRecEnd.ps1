@@ -1,4 +1,4 @@
-#180714
+#180718
 #_EDCBX_HIDE_
 #視聴予約なら終了
 if ($env:RecMode -eq 4) { exit }
@@ -7,7 +7,7 @@ if ($env:RecMode -eq 4) { exit }
 
 <#
 ##EDCBの設定
-・指定サービスのみ録画:全サービスは対応していないかも、必要ないし
+・指定サービスのみ録画:全サービスはPID判別が非対応
 ・番組情報を出力する:デュアルモノの判別
 ・録画情報保存フォルダを指定しない:場所が$env:FilePath(録画フォルダ)になっているため、要望があれば設定項目に加える
 ・録画終了後のデフォルト動作:何もしない:Backup and Syncを動かすため
@@ -46,12 +46,12 @@ $logcnt_max=1000
 #0=無効、1=有効
 $ts_del_toggle=1
 #録画フォルダの最大サイズを指定(0～8EB、単位:任意)
-$ts_folder_max=50GB
+$ts_folder_max=100GB
 #--------------------mp4フォルダサイズを一定に保つファイルの削除--------------------
 #0=無効、1=有効
 $mp4_del_toggle=1
 #backup and sync用フォルダの最大サイズを指定(0～8EB、単位:任意)
-$mp4_folder_max=15GB
+$mp4_folder_max=50GB
 #--------------------jpg出力--------------------
 #0=無効、1=有効
 $jpg_toggle=1
@@ -81,7 +81,7 @@ $tmp_folder_path='C:\DTV\tmp'
 $bas_folder_path='C:\DTV\backupandsync'
 #25回試行してもffmpegの処理に失敗、mp4が10GBより大きい場合、tsファイル、番組情報ファイル、エンコしたmp4ファイルを退避するディレクトリ
 $err_folder_path='C:\Users\sbn\Desktop'
-#mp4用ffmpeg引数
+#mp4用ffmpeg引数 使用可能:$audio_option(デュアルモノの判別)、$quality(tsファイルサイズ判別)、$pid_need(PID判別)
 function arg_mp4 {
     $script:arg="-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf bwdif=0:-1:1,pp=ac -global_quality ${quality} -c:v h264_qsv -preset:v veryslow -g 15 -bf 2 -refs 4 -b_strategy 1 -look_ahead 1 -look_ahead_depth 60 -pix_fmt nv12 -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${pid_need} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
 }
@@ -89,7 +89,7 @@ function arg_mp4 {
 #0=無効、1=有効
 $tweet_toggle=1
 #ruby.exe
-$ruby_path='C:\Ruby25-x64\bin\ruby.exe'
+$ruby_path='C:\Ruby24-x64\bin\ruby.exe'
 #tweet.rb
 $tweet_rb_path='C:\DTV\EDCB\tweet.rb'
 #SSL証明書(環境変数)
@@ -98,7 +98,7 @@ $env:ssl_cert_file='C:\DTV\EDCB\cacert.pem'
 #0=無効、1=有効
 $discord_toggle=1
 #webhook url
-$hookUrl = 'https://discordapp.com/api/webhooks/XXXXXXXXXX'
+$hookUrl = 'https://discordapp.com/api/webhooks/466346185456746506/6DvzeWQVXT7oqUVCu5T4fN_ShkgVkXpvy-r4_ztxQPgfaJJtCM_FM-HjQc5CAZDu49Ok'
 
 
 #====================NotifyIcon====================
@@ -255,17 +255,15 @@ if (("$jpg_toggle" -eq "1") -And ("$env:Addkey" -match "$jpg_addkey")) {
 
 
 #====================tsファイルサイズ判別====================
-if ("${tssize_toggle}" -eq "1") {
-    #tsファイルのサイズを変数ts_sizeに格納
-    $ts_size=$(Get-ChildItem -LiteralPath "${env:FilePath}").Length
-    #20GB以下ならquality 26、より大きいなら28
-    if ($ts_size -le $tssize_max) {
-        $quality="$quality_normal"
-    } elseif ($ts_size -gt $tssize_max) {
-        $quality="$quality_low"
+switch ("$tssize_toggle") {
+    {$_ -eq "1"} {
+        #閾値$tssize_max以下なら通常品質$quality_normal、より大きいなら低品質$quality_low
+        switch ((Get-ChildItem -LiteralPath "${env:FilePath}").Length) {
+            {$_ -le $tssize_max} {$quality="$quality_normal"}
+            {$_ -gt $tssize_max} {$quality="$quality_low"}
+        }
     }
-} elseif ("${tssize_toggle}" -eq "0") {
-    $quality="$quality_normal"
+    {$_ -eq "0"} {$quality="$quality_normal"}
 }
 Write-Output "quality:$quality"
 
@@ -280,7 +278,7 @@ if (Get-Content -LiteralPath "${env:FilePath}.program.txt" | Select-String -Simp
 Write-Output "audio_option:$audio_option"
 
 #====================PIDの判別====================
-#前の番組の音声や映像のPIDを引数に入れないため
+#前の番組、裏番組等の音声や映像のPIDを引数に入れないため
 #-analyzeduration 30M -probesize 100Mで適切にストリームを読み込む
 $StdErr=[string](&"${ffpath}\ffmpeg.exe" -hide_banner -nostats -analyzeduration 30M -probesize 100M -i "${env:FilePath}" 2>&1)
 #スペース、CRを消す
@@ -372,19 +370,12 @@ if (($ExitCode -eq 1) -Or ($mp4_size -gt 10GB)) {
         $StdErr=($StdErr -replace " ","")
         #$StdErrをソートし分岐
         switch ($StdErr) {
-            #そもそもtsファイル無いやんけ
             {$_ -match 'Nosuchfileordirectory'} {$err_detail+="`nNo such file or directory."}
-            #mp4が10GBより大きくなっちゃったよ
             {$mp4_size -gt 10GB} {$err_detail+="`n[googledrive] Can not upload because it exceeds 10GB."}
-            #25回ループしてもQSVの機嫌は戻らなかった、CPUスペックに対して背伸びした引数でないことを確認
             {$_ -match 'Errorduringencoding:devicefailed'} {$err_detail+="`n[h264_qsv] Error during encoding: device failed (-17)."}
-            #PID判別に失敗して余分なストリームが紛れ込んだか、引数の-analyzedurationと-probesizeが足りず解析できないか
             {$_ -match 'Couldnotfindcodecparameters'} {$err_detail+="`n[mpegts] Could not find codec parameters."}
-            #デュアルモノ-filter_complex channelsplit失敗？ffmpeg4.0で起こることを確認
             {$_ -match 'Unsupportedchannellayout'} {$err_detail+="`n[aac] Unsupported channel layout."}
-            #ADTSのフレームヘッダ解析エラーは恐らく問題ない ExitCode:0
-            #{$_ -match 'ErrorparsingADTSframeheader'} {$err_detail+='[AVBSFContext] Error parsing ADTS frame header!.'}
-            #おま環
+            #{$_ -match 'ErrorparsingADTSframeheader'} {$err_detail+='[AVBSFContext] Error parsing ADTS frame header!.'} #ADTSのフレームヘッダ解析エラーは恐らく問題ない ExitCode:0
             default {$err_detail="`nUnknown."}
         }
     }
