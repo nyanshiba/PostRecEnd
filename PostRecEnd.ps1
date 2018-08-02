@@ -1,4 +1,4 @@
-#180718
+#180802
 #_EDCBX_HIDE_
 #視聴予約なら終了
 if ($env:RecMode -eq 4) { exit }
@@ -46,7 +46,7 @@ $logcnt_max=1000
 #0=無効、1=有効
 $ts_del_toggle=1
 #録画フォルダの最大サイズを指定(0～8EB、単位:任意)
-$ts_folder_max=100GB
+$ts_folder_max=150GB
 #--------------------mp4フォルダサイズを一定に保つファイルの削除--------------------
 #0=無効、1=有効
 $mp4_del_toggle=1
@@ -65,14 +65,16 @@ function arg_jpg {
 }
 #--------------------tsファイルサイズ判別--------------------
 #通常品質
-$quality_normal=29
+$quality_normal=24
 #0=無効(通常品質のみ使用)、1=有効(通常・低品質を閾値を元に切り替える)
 $tssize_toggle=1
 #閾値
 $tssize_max=20GB
 #低品質
-$quality_low=32
+$quality_low=26
 #--------------------エンコード--------------------
+#プロセス優先度(High,Abobe,Normal,Bellow,Idle)
+$Priority='Below'
 #ffmpeg.exe、ffprobe.exeがあるディレクトリ
 $ffpath='C:\DTV\ffmpeg'
 #一時的にmp4を吐き出すディレクトリ
@@ -83,7 +85,8 @@ $bas_folder_path='C:\DTV\backupandsync'
 $err_folder_path='C:\Users\sbn\Desktop'
 #mp4用ffmpeg引数 使用可能:$audio_option(デュアルモノの判別)、$quality(tsファイルサイズ判別)、$pid_need(PID判別)
 function arg_mp4 {
-    $script:arg="-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf bwdif=0:-1:1,pp=ac -global_quality ${quality} -c:v h264_qsv -preset:v veryslow -g 15 -bf 2 -refs 4 -b_strategy 1 -look_ahead 1 -look_ahead_depth 60 -pix_fmt nv12 -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${pid_need} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
+    #$script:arg="-y -hide_banner -nostats -threads 1 -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf bwdif=0:-1:1,pp=ac -global_quality ${quality} -c:v h264_qsv -preset:v veryslow -g 15 -bf 2 -refs 4 -b_strategy 1 -look_ahead 1 -look_ahead_depth 60 -pix_fmt nv12 -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${pid_need} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
+    $script:arg="-y -hide_banner -nostats -threads 1 -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf bwdif=0:-1:1,pp=ac -c:v libx265 -crf ${quality} -preset:v fast -g 15 -bf 2 -refs 4 -pix_fmt yuv420p -bsf:v hevc_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${pid_need} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
 }
 #--------------------Twitter--------------------
 #0=無効、1=有効
@@ -98,7 +101,7 @@ $env:ssl_cert_file='C:\DTV\EDCB\cacert.pem'
 #0=無効、1=有効
 $discord_toggle=1
 #webhook url
-$hookUrl = 'https://discordapp.com/api/webhooks/466346185456746506/6DvzeWQVXT7oqUVCu5T4fN_ShkgVkXpvy-r4_ztxQPgfaJJtCM_FM-HjQc5CAZDu49Ok'
+$hookUrl='https://discordapp.com/api/webhooks/XXXXXXXXXX
 
 
 #====================NotifyIcon====================
@@ -164,7 +167,7 @@ function ffprocess {
     #プロセス開始
     $p.Start() | Out-Null
     #プロセス優先度を高に
-    (Get-Process -Id $p.Id).PriorityClass='High'
+    (Get-Process -Id $p.Id).PriorityClass="$Priority"
     #Write-Output $p.Id
     #プロセスの標準エラー出力を変数に格納(注意:WaitForExitの前に書かないとデッドロックします)
     $script:StdErr=$p.StandardError.ReadToEnd()
@@ -183,7 +186,7 @@ if ("${log_toggle}" -eq "1") {
     #ログ取り開始
     Start-Transcript -LiteralPath "${log_path}\${env:FileName}.txt"
     #録画用アプリの起動数を取得
-    $RecCount=(Get-Process -ErrorAction 0 'EpgDataCap_bon').Count
+    $RecCount=(Get-Process -ErrorAction 0 "EpgDataCap_bon","TVTest").Count
     Write-Output "同時録画数:$RecCount"
     #Get-ChildItemでログフォルダのtxtファイルを取得、更新日降順でソートし、logcnt_max個飛ばし、ForEach-ObjectでRemove-Itemループ
     Get-ChildItem "${log_path}\*.txt" | Sort-Object LastWriteTime -Descending | Select-Object -Skip ${logcnt_max} | ForEach-Object {
@@ -206,7 +209,7 @@ if ("${ts_del_toggle}" -eq "1") {
         #ts、同名のts.program.txt削除
         Remove-Item -LiteralPath "${env:FolderPath}\${ts_del_name}.ts"
         Remove-Item -LiteralPath "${env:FolderPath}\${ts_del_name}.ts.program.txt"
-        #Remove-Item -LiteralPath "${env:FolderPath}\${ts_del_name}.ts.err"
+        Remove-Item -LiteralPath "${env:FolderPath}\${ts_del_name}.ts.err"
         Write-Output "削除:${ts_del_name}.ts、ts.program.txt"
         #録画フォルダの合計サイズを取得
         $ts_folder_size=$(Get-ChildItem "${env:FolderPath}" | Measure-Object -Sum Length).Sum
@@ -261,6 +264,7 @@ switch ("$tssize_toggle") {
         switch ((Get-ChildItem -LiteralPath "${env:FilePath}").Length) {
             {$_ -le $tssize_max} {$quality="$quality_normal"}
             {$_ -gt $tssize_max} {$quality="$quality_low"}
+            {$true} {$ts_size=$_}
         }
     }
     {$_ -eq "0"} {$quality="$quality_normal"}
