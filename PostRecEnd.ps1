@@ -96,7 +96,7 @@ $hookUrl='https://discordapp.com/api/webhooks/466346185456746506/6DvzeWQVXT7oqUV
 #########################################################################################################################
 
 #====================Move関数====================
-function Post {
+function Move {
     #自動削除が有効の場合、ts、ts.program.txt、ts.err、mp4を退避
     if ("${ts_del_toggle}" -eq "1") {
         Move-Item -LiteralPath "${env:FilePath}" "${err_folder_path}" -ErrorAction SilentlyContinue
