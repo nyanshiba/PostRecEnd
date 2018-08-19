@@ -1,4 +1,4 @@
-#180815
+#180820
 #_EDCBX_HIDE_
 #Powershellプロセスの優先度を高に
 #(Get-Process -Id $pid).PriorityClass='High'
@@ -6,14 +6,18 @@
 #####################ユーザ設定####################################################################################################
 
 <#
-エラーメッセージ
-・No such file or directory. そもそもtsファイル無いやんけ
-・[googledrive] Can not upload because it exceeds 10GB. mp4が10GBより大きくなっちゃったよ
-・[mpegts] Could not find codec parameters. PID判別に失敗して余分なストリームが紛れ込んだか、引数の-analyzedurationと-probesizeが足りず解析できないか
-・[aac] Unsupported channel layout. デュアルモノ-filter_complex channelsplit失敗？ffmpeg4.0で起こることを確認
-・[AVBSFContext] Error parsing ADTS frame header!. -c:a copy時にこのADTSのフレームヘッダ解析エラーが2度出ると問題がある ExitCode:0
-・[h264_qsv] Error during encoding: device failed (-17). ループしてもQSVの機嫌は戻らなかった、CPUスペックに対して背伸びした引数でないことを確認
-・Unknown. おま環
+エラーメッセージ一覧
+・[EDCB] 録画失敗によりエンコード不可: tsファイルが無い(パスが渡されない)場合。録画失敗？
+・[EDCB] PIDの判別不可: ストリームの解析が失敗以前に不可能。Drop過多orスクランブル解除失敗？
+・[GoogleDrive] 10GB以上の為アップロードできません: GoogleDriveの仕様に合わせる。
+・[h264_qsv] device failed (-17): QSVのエラー。ループして復帰を試みるも失敗した場合。
+・[mpegts] コーデックパラメータが見つかりません: PID判別から渡されたPIDが適切でないorffmpegが非対応のストリーム。
+・[aac] 非対応のチャンネルレイアウト: ffmpeg4.0～デュアルモノを少なくとも従来の引数では扱えなくなった。
+・[-c:a aac] PIDの判別に失敗: -c:a aac時。指定サービスのみ(全サービスでない)録画になっていなければ必ず発生。また一通りのストリームに対応させた筈だけど起こるかもしれない。
+・[-c:a copy] PIDの判別に失敗: -c:a copy時。上に同じ。
+・不明なエラー: 
+・[-c:a aac] PIDの判別に失敗？: -c:a aac時。ffmpegの終了コードは0だが異常がある？場合。
+・[-c:a copy] PIDの判別に失敗？: -c:a copy時。上に同じ。
 #>
 
 #--------------------バルーンチップ表示--------------------
@@ -91,12 +95,12 @@ $env:ssl_cert_file='C:\DTV\EDCB\cacert.pem'
 #0=無効、1=有効
 $discord_toggle=1
 #webhook url
-$hookUrl='https://discordapp.com/api/webhooks/466346185456746506/6DvzeWQVXT7oqUVCu5T4fN_ShkgVkXpvy-r4_ztxQPgfaJJtCM_FM-HjQc5CAZDu49Ok'
+$hookUrl='https://discordapp.com/api/webhooks/XXXXXXXXXX'
 
 #########################################################################################################################
 
 #====================Move関数====================
-function Move {
+function TsSave {
     #自動削除が有効の場合、ts、ts.program.txt、ts.err、mp4を退避
     if ("${ts_del_toggle}" -eq "1") {
         Move-Item -LiteralPath "${env:FilePath}" "${err_folder_path}" -ErrorAction SilentlyContinue
@@ -162,11 +166,10 @@ function ffprocess {
     $p.StartInfo=$psi
     #プロセス開始
     $p.Start() | Out-Null
-    #使用コア お手上げorz
+    #使用コア お手上げと思っていたが動いてる？
     #(Get-Process -Id $p.Id).ProcessorAffinity=[int]"$Affinity"
     $p.ProcessorAffinity=[int]"$Affinity"
-    Write-Output "ProcessorAffinity:$($p.ProcessorAffinity)"
-    #Get-Process "ffmpeg" | select Id,ProcessorAffinity
+    #Write-Output "ProcessorAffinity:$($p.ProcessorAffinity)"
     #プロセス優先度
     $p.PriorityClass=$Priority
     #プロセスの標準エラー出力を変数に格納(注意:WaitForExitの前に書かないとデッドロックします)
@@ -216,33 +219,29 @@ if ("${log_toggle}" -eq "1") {
 }
 
 #====================ts・mp4の自動削除====================
-#フォルダの合計サイズを取得する関数
-function FolderSize {
-    $script:delsize=(Get-ChildItem "$delpath" | Measure-Object -Sum Length).Sum
-}
 #フォルダの合計サイズを設定値以下に丸め込む関数
 function FolderRound {
-    #フォルダの合計サイズを取得
-    FolderSize
-    #合計サイズがdelroundより大きい間ループ
-    while ($delsize -gt $delround) {
-        #録画フォルダ内の1番古いtsファイルのファイル名を取得
-        #録画フォルダ内のtsファイルに対し、最終更新年月日でソートした1番最初にくるやつ、ファイル名(拡張子なし)を取得
-        $delname=$(Get-ChildItem "$delpath\*.$delext" | Sort-Object LastWriteTime | Select-Object BaseName -First 1).BaseName
+    #初期値
+    $delcnt=-1
+    #必ず1回は実行、フォルダ内の新しいファイルをSkipする数$iを増やしていって$maintsizeを$delround以下に丸め込むループ
+    do {
+        $delcnt++
+        $maintsize=(Get-ChildItem "$delpath\*.$delext" | Sort-Object LastWriteTime -Descending | Select-Object -Skip $delcnt | Measure-Object -Sum Length).Sum
+    } while ($maintsize -gt $delround)
+    #先程Skipしたファイルを実際に削除
+    Get-ChildItem "$delpath\*.$delext" | Sort-Object LastWriteTime | Select-Object -First $delcnt | ForEach-Object {
         #tsかmp4を削除
-        Remove-Item -LiteralPath "$delpath\$delname.$delext" -ErrorAction SilentlyContinue
-        $dellog="削除:$delname.$delext"
-        #tsフォルダを削除中の場合、同名のts.program.txt、ts.errも削除
+        Remove-Item -LiteralPath "$delpath\$($_.BaseName).$delext" -ErrorAction SilentlyContinue
+        $dellog="削除:$($_.BaseName).$delext"
+        #tsを削除中の場合、同名のts.program.txt、ts.errも削除
         if ("$delext" -eq "ts") {
-            Remove-Item -LiteralPath "$delpath\$delname.$delext.program.txt" -ErrorAction SilentlyContinue
-            Remove-Item -LiteralPath "$delpath\$delname.$delext.err" -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath "$delpath\$($_.BaseName).$delext.program.txt" -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath "$delpath\$($_.BaseName).$delext.err" -ErrorAction SilentlyContinue
             $dellog+="、.program.txt、.err"
         }
         Write-Output $dellog
-        #フォルダの合計サイズを取得
-        FolderSize
     }
-    Write-Output "${delext}フォルダ:$([math]::round(${delsize}/1GB,2))GB"
+    Write-Output "${delext}フォルダ:$([math]::round(${maintsize}/1GB,2))GB"
 }
 #ts_del_toggle=1なら実行
 if ("$ts_del_toggle" -eq "1") {
@@ -281,16 +280,19 @@ if (("$jpg_toggle" -eq "1") -And ("$env:Addkey" -match "$jpg_addkey")) {
 }
 
 #====================tsファイルサイズ判別====================
+#tsファイルサイズを取得
+$ts_size=(Get-ChildItem -LiteralPath "${env:FilePath}").Length
 switch ("$tssize_toggle") {
+    {$_ -eq "0"} {
+        $quality="$quality_normal"
+    }
     {$_ -eq "1"} {
         #閾値$tssize_max以下なら通常品質$quality_normal、より大きいなら低品質$quality_low
-        switch ((Get-ChildItem -LiteralPath "${env:FilePath}").Length) {
+        switch ($ts_size) {
             {$_ -le $tssize_max} {$quality="$quality_normal"}
             {$_ -gt $tssize_max} {$quality="$quality_low"}
-            {$true} {$ts_size=$_}
         }
     }
-    {$_ -eq "0"} {$quality="$quality_normal"}
 }
 Write-Output "quality:$quality"
 
@@ -354,7 +356,13 @@ foreach ($a in $StdErr) {
         $pid_need+=($a -split '0x|]')[1]
     }
 }
-Write-Output "PID:${pid_need}"
+Write-Output "PID:$pid_need"
+#PID判別失敗の例外処理
+if ("$pid_need" -eq $null) {
+    Move
+    $err_detail+="`n[EDCB] PIDの判別不可"
+    Post
+}
 
 #====================エンコード====================
 #プロセス開始用の変数
@@ -393,10 +401,10 @@ Write-Output "ExitCode:$ExitCode"
 #ffprocessから渡された$StdErrからスペースを消す
 $StdErr=($StdErr -replace " ","")
 #ffmpegの終了コード、mp4のファイルサイズによる条件分岐
-if (($ExitCode -ne 0) -Or ($mp4_size -gt 10GB)) {
+if (($ExitCode -gt 0) -Or ($mp4_size -gt 10GB)) {
     #ts、ts.program.txt、ts.err、mp4を退避
-    Move
-    #$StdErrをソートし分岐
+    TsSave
+    #$StdErrをソートし投稿内容を決める
     switch ($StdErr) {
         {$mp4_size -gt 10GB} {$err_detail+="`n[GoogleDrive] 10GB以上の為アップロードできません"}
         {$_ -match 'Errorduringencoding:devicefailed'} {$err_detail+="`n[h264_qsv] device failed (-17)"}
@@ -406,6 +414,8 @@ if (($ExitCode -ne 0) -Or ($mp4_size -gt 10GB)) {
         {$_ -match 'Inputpackettoosmall'} {$err_detail+="`n[-c:a copy] PIDの判別に失敗"}
         default {$err_detail="`n不明なエラー"}
     }
+    #Twitter、Discord
+    Post
     #BalloonTip
     $TipIcon='Error'
     $TipTitle='エンコード失敗'
@@ -415,13 +425,15 @@ if (($ExitCode -ne 0) -Or ($mp4_size -gt 10GB)) {
     #$StdErrをソートし分岐
     switch ($StdErr) {
         {$_ -match 'Toomanypacketsbuffered'} {
+            #投稿内容
             $err_detail+="`n[-c:a aac] PIDの判別に失敗？"
-            #Move
+            #Twitter、Discord
             Post
         }
         {$_ -match 'Inputpackettoosmall'} {
+            #投稿内容
             $err_detail+="`n[-c:a copy] PIDの判別に失敗？"
-            #Move
+            #Twitter、Discord
             Post
         }
     }
