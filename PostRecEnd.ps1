@@ -1,7 +1,7 @@
-#180820
+#180910
 #_EDCBX_HIDE_
-#Powershellプロセスの優先度を高に
-#(Get-Process -Id $pid).PriorityClass='High'
+#ファイル名をタイトルバーに表示
+#(Get-Host).UI.RawUI.WindowTitle="$($MyInvocation.MyCommand.Name):${env:FileName}.ts"
 
 #####################ユーザ設定####################################################################################################
 
@@ -16,65 +16,86 @@
 ・[-c:a aac] PIDの判別に失敗: -c:a aac時。指定サービスのみ(全サービスでない)録画になっていなければ必ず発生。また一通りのストリームに対応させた筈だけど起こるかもしれない。
 ・[-c:a copy] PIDの判別に失敗: -c:a copy時。上に同じ。
 ・不明なエラー: 
-・[-c:a aac] PIDの判別に失敗？: -c:a aac時。ffmpegの終了コードは0だが異常がある？場合。
-・[-c:a copy] PIDの判別に失敗？: -c:a copy時。上に同じ。
+・[-c:a aac] PIDの判別に失敗？ ExitCode:0: -c:a aac時。ffmpegの終了コードは0だが異常がある？場合。
+・[-c:a copy] -c:a aacか-ss 1で治るやつ ExitCode:0: -c:a copy時。上に同じ。
 #>
 
-#--------------------バルーンチップ表示--------------------
-#0=無効、1=有効
-$balloontip_toggle=1
-#--------------------ログ--------------------
-#0=無効、1=有効
-$log_toggle=1
-#ログ出力ディレクトリ
-$log_path='C:\DTV\EncLog'
-#ログを残す数を指定
-$logcnt_max=1000
-#--------------------tsの自動削除--------------------
-#0=無効(tsをローカルに残す)、1=有効(tsを自動削除)
-$ts_del_toggle=1
-#録画フォルダの最大サイズを指定(0～8EB、単位:任意)
-$ts_folder_max=150GB
-#--------------------mp4の自動削除--------------------
-#0=無効(mp4をローカルに残す)、1=有効(mp4を自動削除)
-$mp4_del_toggle=1
-#backup and sync用フォルダの最大サイズを指定(0～8EB、単位:任意)
-$mp4_folder_max=50GB
-#--------------------jpg出力--------------------
-#0=無効、1=有効
-$jpg_toggle=1
-#連番jpgを出力するフォルダ用のディレクトリ
-$jpg_path='C:\Users\sbn\Desktop\TVTest'
-#jpg出力したい自動予約キーワード(全てjpg出力したい場合は$jpg_addkey=''のようにして下さい)
-$jpg_addkey='フランキス|BEATLESS|夏目友人帳|キズナアイのBEATスクランブル'
-#jpg用ffmpeg引数(横pxが1440のとき、$scale=',scale=1920:1080'が使用可能)(ここの引数を弄ればpng等の別の出力を行うことも可能)
-function arg_jpg {
-    $script:arg="-y -hide_banner -nostats -an -skip_frame nokey -i `"${env:FilePath}`" -vf bwdif=0:-1:1,pp=ac,hqdn3d=2.0${scale} -f image2 -q:v 0 -vsync 0 `"${jpg_path}\${env:FileName}\%05d.jpg`""
-}
-#--------------------tsファイルサイズ判別--------------------
-#通常品質(LA-ICQ:29,x265:25)
-$quality_normal=27
-#0=無効(通常品質のみ使用)、1=有効(通常・低品質を閾値を元に切り替える)
-$tssize_toggle=1
-#閾値
-$tssize_max=20GB
-#低品質(LA-ICQ:31,x265:27)
-$quality_low=30
-#--------------------エンコード--------------------
+#--------------------プロセス--------------------
+#tsからmp4、jpg、waifu2x等の処理に使用される
 #プロセス優先度 (Normal,Idle,High,RealTime,BelowNormal,AboveNormal) Process.PriorityClass参照
 $Priority='BelowNormal'
 #使用する論理コアの指定 コア5(10000)～12(100000000000)を使用=0000111111110000(2進)=4080(10進)=0x0FF0(16進) Process.ProcessorAffinity参照
 $Affinity='0x0FF0'
 #ffmpeg.exe、ffprobe.exeがあるディレクトリ
 $ffpath='C:\DTV\ffmpeg'
+
+#--------------------ログ--------------------
+#0=無効、1=有効
+$log_toggle=1
+#ログ出力ディレクトリ
+$log_path='C:\DTV\EncLog'
+#ログを残す数
+$logcnt_max=1000
+
+#--------------------tsの自動削除--------------------
+#0=無効(tsをローカルに残す)、1=有効(tsを自動削除)
+$ts_del_toggle=1
+#録画フォルダの上限 超過した場合、toggle=0:容量警告(Twitter、Discord) 1:削除
+$ts_folder_max=200GB
+
+#--------------------mp4の自動削除--------------------
+#0=無効(mp4をローカルに残す)、1=有効(mp4を自動削除)
+$mp4_del_toggle=1
+#mp4用フォルダの上限 超過した場合、toggle=0:容量警告(Twitter、Discord) 1:削除
+$mp4_folder_max=50GB
+
+#--------------------jpg出力--------------------
+#0=無効、1=有効
+$jpg_toggle=1
+#連番jpgを出力するフォルダ用のディレクトリ
+$jpg_path='C:\Users\sbn\Desktop\TVTest'
+#jpg出力したい自動予約キーワード(全てjpg出力したい場合は$jpg_addkey=''のようにして下さい)
+$jpg_addkey='とある魔術の禁書目録|アリシゼーション'
+#自動予約キーワードに引っ掛かった場合に実行するコード 使用可能:$scale(横が1440pxの場合のみ",scale=1920:1080"が格納される、画像にはSARとか無いので)
+function arg_jpg {
+    #連番jpg出力の例
+    New-Item "${jpg_path}\${env:FileName}" -ItemType Directory
+    $script:file="${ffpath}\ffmpeg.exe"
+    $script:arg="-y -hide_banner -nostats -an -skip_frame nokey -i `"${env:FilePath}`" -vf bwdif=0:-1:1,pp=ac,hqdn3d=2.0${scale} -f image2 -q:v 0 -vsync 0 `"$jpg_path\$env:FileName\%05d.jpg`""
+    Invoke-Process
+    <#
+    #連番jpg出力したものをwaifu2xで上書きする例
+    $script:file="C:\DTV\waifu2x-caffe\waifu2x-caffe-cui.exe"
+    $script:arg="-m noise_scale -s 2 -n 3 -p cpu --model_dir models/upconv_7_photo -i `"$jpg_path\$env:FileName\*.png`" -o `"$jpg_path\$env:FileName\*.jpg`""
+    Invoke-Process
+    Remove-Item -LiteralPath "$jpg_path\$env:FileName\*.png" -ErrorAction SilentlyContinue
+    #>
+    #tsを保持用ディレクトリにコピーする例
+    Copy-Item -LiteralPath "${env:FilePath}" "D:\tsfiles" -ErrorAction SilentlyContinue
+}
+
+#--------------------tsファイルサイズ判別--------------------
+#通常品質(LA-ICQ:29,x265:25)
+$quality_normal=28
+#0=無効(通常品質のみ使用)、1=有効(通常・低品質を閾値を元に切り替える)
+$tssize_toggle=1
+#閾値
+$tssize_max=20GB
+#低品質(LA-ICQ:31,x265:27)
+$quality_low=30
+
+#--------------------エンコード--------------------
 #一時的にmp4を吐き出すディレクトリ
 $tmp_folder_path='C:\DTV\tmp'
-#Backup and Sync、ローカル保存用ディレクトリ
-$bas_folder_path='C:\DTV\backupandsync'
-#ループしてもffmpegの処理に失敗、mp4が10GBより大きい場合、tsファイル、番組情報ファイル、エンコしたmp4ファイルを退避するディレクトリ
+#mp4保存ディレクトリ(Backup and Sync、ローカル保存用)
+$mp4_folder_path='C:\DTV\backupandsync'
+#例外時にts、ts.program.txt、ts.err、mp4を退避するディレクトリ(ループしてもffmpegの処理に失敗、mp4が10GBより大きい場合 etc…)
 $err_folder_path='C:\Users\sbn\Desktop'
+#mp4のファイルサイズ上限(GoogleDriveの10GB制限用、ローカル保存時には不要なので20GB等にすると良い)
+$mp4_max=10GB
 #mp4用ffmpeg引数 使用可能:$audio_option(デュアルモノの判別)、$quality(tsファイルサイズ判別)、$pid_need(PID判別)
 function arg_mp4 {
+    $script:file="${ffpath}\ffmpeg.exe"
     #QSV H.264 LA-ICQ
     $script:arg="-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf bwdif=0:-1:1,pp=ac,hqdn3d=2.0 -global_quality ${quality} -c:v h264_qsv -preset:v veryslow -g 300 -bf 6 -refs 4 -b_strategy 1 -look_ahead 1 -look_ahead_depth 60 -pix_fmt nv12 -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${pid_need} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
     #x265 fast
@@ -82,6 +103,7 @@ function arg_mp4 {
     #x265 bel9r
     #$script:arg="-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf bwdif=0:-1:1,pp=ac -c:v libx265 -preset:v fast -x265-params crf=${quality}:rc-lookahead=40:psy-rd=0.3:keyint=15:no-open-gop:bframes=2:rect=1:amp=1:me=umh:subme=3:ref=3:rd=3 -pix_fmt yuv420p -bsf:v hevc_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${pid_need} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
 }
+
 #--------------------Twitter--------------------
 #0=無効、1=有効
 $tweet_toggle=1
@@ -91,11 +113,16 @@ $ruby_path='C:\Ruby24-x64\bin\ruby.exe'
 $tweet_rb_path='C:\DTV\EDCB\tweet.rb'
 #SSL証明書(環境変数)
 $env:ssl_cert_file='C:\DTV\EDCB\cacert.pem'
+
 #--------------------Discord--------------------
 #0=無効、1=有効
 $discord_toggle=1
 #webhook url
 $hookUrl='https://discordapp.com/api/webhooks/XXXXXXXXXX'
+
+#--------------------バルーンチップ表示--------------------
+#0=無効、1=有効
+$balloontip_toggle=1
 
 #########################################################################################################################
 
@@ -114,8 +141,6 @@ function TsSave {
 
 #====================Post関数====================
 function Post {
-    #投稿内容
-    $env:content="Error:${env:FileName}.ts${err_detail}"
     #Twitter警告
     if ("$tweet_toggle" -eq "1") {
         &"${ruby_path}" "${tweet_rb_path}"
@@ -138,13 +163,14 @@ if ($env:RecMode -eq 4) {
 }
 if ("${env:FilePath}" -eq $null) {
     $err_detail+="`n[EDCB] 録画失敗によりエンコード不可"
+    $env:content="Error:${env:FileName}.ts${err_detail}"
     Post
 }
 
-#====================ffprocess関数====================
+#====================Invoke-Process関数====================
 #ffmpeg、&ffmpeg、.\ffmpeg:ffmpegが引数を正しく認識しない(ファイル名くらいなら-f mpegtsで行けるけどもういいです)
 #Start-Process ffmpeg:-NoNewWindowはWrite-Host？-RedirectStandardOutput、Errorはファイルのみ、-PassThruはExitCodeは受け取れても.StandardOutput、Errorは受け取れない仕様
-function ffprocess {
+function Invoke-Process {
     #設定
     #ProcessStartInfoクラスをインスタンス化
     $psi=New-Object System.Diagnostics.ProcessStartInfo
@@ -169,7 +195,6 @@ function ffprocess {
     #使用コア お手上げと思っていたが動いてる？
     #(Get-Process -Id $p.Id).ProcessorAffinity=[int]"$Affinity"
     $p.ProcessorAffinity=[int]"$Affinity"
-    #Write-Output "ProcessorAffinity:$($p.ProcessorAffinity)"
     #プロセス優先度
     $p.PriorityClass=$Priority
     #プロセスの標準エラー出力を変数に格納(注意:WaitForExitの前に書かないとデッドロックします)
@@ -189,21 +214,28 @@ Add-Type -AssemblyName System.Windows.Forms
 $balloon=New-Object System.Windows.Forms.NotifyIcon
 #powershellのアイコンを使用
 $balloon.Icon=[System.Drawing.Icon]::ExtractAssociatedIcon('C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe')
-#タスクトレイアイコンのヒントにファイル名を表示
 #NotifyIcon.Textが64文字を超えると例外、String.Substringの開始値~終了値が文字数を超えると例外
-#[string]($MyInvocation.MyCommand.Name) + ":${env:FileName}.ts"
 switch (("$($MyInvocation.MyCommand.Name):${env:FileName}.ts").Length) {
     {$_ -ge 64} {$TextLength="63"}
     {$_ -lt 64} {$TextLength="$_"}
 }
+#タスクトレイアイコンのヒントにファイル名を表示
 $balloon.Text=([string]($MyInvocation.MyCommand.Name) + ":${env:FileName}.ts").SubString(0,$TextLength)
 #タスクトレイアイコン表示
 $balloon.Visible=$True
-#ファイル名をタイトルバーに表示
-#(Get-Host).UI.RawUI.WindowTitle=$MyInvocation.MyCommand.Name + ":${env:FileName}.ts"
-#(Get-Host).UI.RawUI.WindowTitle="$($MyInvocation.MyCommand.Name):${env:FileName}.ts"
+<#
+#ログ有効時、NotifyIconクリックでログを既定のテキストエディタで開く
+if ($log_toggle -eq 1) {
+    $balloon.add_Click({
+        if ($_.Button -eq [System.Windows.Forms.MouseButtons]::Left) {
+            &"${log_path}\${env:FileName}.txt"
+        }
+    })
+}
+#>
 
 #====================ログ====================
+#ログのソート例: (sls -path "$log_path\*.txt" 'faild' -SimpleMatch).Path
 #log_toggle=1ならば実行
 if ("${log_toggle}" -eq "1") {
     #ログ取り開始
@@ -243,29 +275,37 @@ function FolderRound {
     }
     Write-Output "${delext}フォルダ:$([math]::round(${maintsize}/1GB,2))GB"
 }
-#ts_del_toggle=1なら実行
-if ("$ts_del_toggle" -eq "1") {
-    $delext='ts'
-    $delround=$ts_folder_max
-    $delpath="$env:FolderPath"
-    FolderRound
+
+#超過時の警告
+function FolderWarning {
+    if ($((Get-ChildItem "$delpath" | Measure-Object -Sum Length).Sum) -gt $delround) {
+        $env:content="Error:${delext}フォルダは${delround}を超過しています"
+        Post
+    }
 }
-#mp4_del_toggle=1なら実行
-if ("$mp4_del_toggle" -eq "1") {
-    $delext='mp4'
-    $delround=$mp4_folder_max
-    $delpath="$bas_folder_path"
-    FolderRound
+
+#ts
+$delext='ts'
+$delround=$ts_folder_max
+$delpath="$env:FolderPath"
+switch ($ts_del_toggle) {
+    0 {FolderWarning}
+    1 {FolderRound}
+}
+#mp4
+$delext='mp4'
+$delround=$mp4_folder_max
+$delpath="$mp4_folder_path"
+switch ($mp4_del_toggle) {
+    0 {FolderWarning}
+    1 {FolderRound}
 }
 
 #====================jpg出力====================
 #jpg出力機能が有効(jpg_toggle=1)且つenv:Addkey(自動予約時のキーワード)にjpg_addkey(指定の文字)が含まれている場合は連番jpgも出力
 if (("$jpg_toggle" -eq "1") -And ("$env:Addkey" -match "$jpg_addkey")) {
-    #出力フォルダ作成
-    New-Item "${jpg_path}\${env:FileName}" -ItemType Directory
-    Write-Output "jpg出力:${env:FileName}.ts"
+    Write-Output "jpg出力"
     #生TSの横が1920か1440か調べる
-    #xml形式で扱い、tsファイル特有のwidthがメタデータの2箇所にあり2つ出力されちゃう問題を解決
     $ts_width=[xml](&"${ffpath}\ffprobe.exe" -v quiet -i "${env:FilePath}" -show_entries stream=width -print_format xml 2>&1)
     $ts_width=$ts_width.ffprobe.streams.stream.width
     #SAR比(1440x1080しか想定してないけど)によるフィルタ設定、jpg出力
@@ -273,10 +313,7 @@ if (("$jpg_toggle" -eq "1") -And ("$env:Addkey" -match "$jpg_addkey")) {
         $scale=',scale=1920:1080'
     }
     #jpg用ffmpeg引数を遅延展開
-    $file="${ffpath}\ffmpeg.exe"
     arg_jpg
-    #ffmpegprocessを起動
-    ffprocess
 }
 
 #====================tsファイルサイズ判別====================
@@ -361,52 +398,49 @@ Write-Output "PID:$pid_need"
 if ("$pid_need" -eq $null) {
     Move
     $err_detail+="`n[EDCB] PIDの判別不可"
+    $env:content="Error:${env:FileName}.ts${err_detail}"
     Post
 }
 
 #====================エンコード====================
-#プロセス開始用の変数
-$file="${ffpath}\ffmpeg.exe"
 #mp4用ffmpeg引数を遅延展開
 arg_mp4
-#エンコードに使用する引数を表示
 Write-Output "Arguments:ffmpeg $arg"
 #カウントを0にリセット
 $cnt=0
-#終了コードが1且つループカウントが10未満までの間、エンコードを試みる
+#終了コードが1且つループカウントが50未満までの間、エンコードを試みる
 do {
     #ループカウント
     $cnt++
-    #再試行時のクールタイム
-    if (($cnt -ge 2) -And ($cnt -lt 5)) {
+    #再試行時からクールタイムを追加
+    if ($cnt -ge 2) {
         Start-Sleep -s 60
     }
     #エンコ
-    ffprocess
-    #エンコ回数が1以下か、終了コードが0の場合実行(何度もループした場合にログが肥大しないため)
-    #whileの後に書くのもありだけど
+    Invoke-Process
+    #エンコ1回目と成功時(ExitCode:0)のログだけで十分
     if (($cnt -le 1) -Or ($ExitCode -eq 0)) {
         #プロセスの標準エラー出力をシェルの標準出力に出力
         Write-Output $StdErr
-        #エンコ後mp4のサイズを出力
+        #エンコ後のmp4のファイルサイズ
         $mp4_size=$(Get-ChildItem -LiteralPath "${tmp_folder_path}\${env:FileName}.mp4").Length
         Write-Output "mp4:$([math]::round(${mp4_size}/1MB,0))MB"
     }
-} while (($ExitCode -eq 1) -And ($cnt -lt 10))
-#最終的なエンコード回数、終了コードを追記
+} while (($ExitCode -eq 1) -And ($cnt -lt 50))
+#最終的なエンコード回数、終了コード
 Write-Output "エンコード回数:$cnt"
 Write-Output "ExitCode:$ExitCode"
 
 #====================Backup and Sync====================
-#ffprocessから渡された$StdErrからスペースを消す
+#Invoke-Processから渡された$StdErrからスペースを消す
 $StdErr=($StdErr -replace " ","")
 #ffmpegの終了コード、mp4のファイルサイズによる条件分岐
-if (($ExitCode -gt 0) -Or ($mp4_size -gt 10GB)) {
+if (($ExitCode -gt 0) -Or ($mp4_size -gt $mp4_max)) {
     #ts、ts.program.txt、ts.err、mp4を退避
     TsSave
     #$StdErrをソートし投稿内容を決める
     switch ($StdErr) {
-        {$mp4_size -gt 10GB} {$err_detail+="`n[GoogleDrive] 10GB以上の為アップロードできません"}
+        {$mp4_size -gt $mp4_max} {$err_detail+="`n[GoogleDrive] 10GB以上の為アップロードできません"}
         {$_ -match 'Errorduringencoding:devicefailed'} {$err_detail+="`n[h264_qsv] device failed (-17)"}
         {$_ -match 'Couldnotfindcodecparameters'} {$err_detail+="`n[mpegts] PIDの判別に失敗"}
         {$_ -match 'Unsupportedchannellayout'} {$err_detail+="`n[aac] 非対応のチャンネルレイアウト"}
@@ -415,28 +449,14 @@ if (($ExitCode -gt 0) -Or ($mp4_size -gt 10GB)) {
         default {$err_detail="`n不明なエラー"}
     }
     #Twitter、Discord
+    $env:content="Error:${env:FileName}.ts${err_detail}"
     Post
     #BalloonTip
     $TipIcon='Error'
     $TipTitle='エンコード失敗'
 } else {
-    #mp4をbas_folder_pathに投げる
-    Move-Item -LiteralPath "${tmp_folder_path}\${env:FileName}.mp4" "${bas_folder_path}"
-    #$StdErrをソートし分岐
-    switch ($StdErr) {
-        {$_ -match 'Toomanypacketsbuffered'} {
-            #投稿内容
-            $err_detail+="`n[-c:a aac] PIDの判別に失敗？"
-            #Twitter、Discord
-            Post
-        }
-        {$_ -match 'Inputpackettoosmall'} {
-            #投稿内容
-            $err_detail+="`n[-c:a copy] PIDの判別に失敗？"
-            #Twitter、Discord
-            Post
-        }
-    }
+    #mp4をmp4_folder_pathに投げる
+    Move-Item -LiteralPath "${tmp_folder_path}\${env:FileName}.mp4" "${mp4_folder_path}"
     #BalloonTip
     $TipIcon='Info'
     $TipTitle='エンコード終了'
