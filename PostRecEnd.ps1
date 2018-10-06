@@ -1,4 +1,4 @@
-#180910
+#181006
 #_EDCBX_HIDE_
 #ファイル名をタイトルバーに表示
 #(Get-Host).UI.RawUI.WindowTitle="$($MyInvocation.MyCommand.Name):${env:FileName}.ts"
@@ -24,8 +24,8 @@
 #tsからmp4、jpg、waifu2x等の処理に使用される
 #プロセス優先度 (Normal,Idle,High,RealTime,BelowNormal,AboveNormal) Process.PriorityClass参照
 $Priority='BelowNormal'
-#使用する論理コアの指定 コア5(10000)～12(100000000000)を使用=0000111111110000(2進)=4080(10進)=0x0FF0(16進) Process.ProcessorAffinity参照
-$Affinity='0x0FF0'
+#使用する論理コアの指定 コア5(10000)～12(100000000000)を使用=0000111111110000(2進)=4080(10進)=0xFF0(16進) Process.ProcessorAffinity参照
+$Affinity='0xFFC'
 #ffmpeg.exe、ffprobe.exeがあるディレクトリ
 $ffpath='C:\DTV\ffmpeg'
 
@@ -55,15 +55,15 @@ $jpg_toggle=1
 #連番jpgを出力するフォルダ用のディレクトリ
 $jpg_path='C:\Users\sbn\Desktop\TVTest'
 #jpg出力したい自動予約キーワード(全てjpg出力したい場合は$jpg_addkey=''のようにして下さい)
-$jpg_addkey='とある魔術の禁書目録|アリシゼーション'
+$jpg_addkey='インターミッション|宇宙戦艦ヤマト|とある魔術の禁書目録|アリシゼーション|beatless'
 #自動予約キーワードに引っ掛かった場合に実行するコード 使用可能:$scale(横が1440pxの場合のみ",scale=1920:1080"が格納される、画像にはSARとか無いので)
 function arg_jpg {
+    <#
     #連番jpg出力の例
     New-Item "${jpg_path}\${env:FileName}" -ItemType Directory
     $script:file="${ffpath}\ffmpeg.exe"
     $script:arg="-y -hide_banner -nostats -an -skip_frame nokey -i `"${env:FilePath}`" -vf bwdif=0:-1:1,pp=ac,hqdn3d=2.0${scale} -f image2 -q:v 0 -vsync 0 `"$jpg_path\$env:FileName\%05d.jpg`""
     Invoke-Process
-    <#
     #連番jpg出力したものをwaifu2xで上書きする例
     $script:file="C:\DTV\waifu2x-caffe\waifu2x-caffe-cui.exe"
     $script:arg="-m noise_scale -s 2 -n 3 -p cpu --model_dir models/upconv_7_photo -i `"$jpg_path\$env:FileName\*.png`" -o `"$jpg_path\$env:FileName\*.jpg`""
@@ -84,6 +84,15 @@ $tssize_max=20GB
 #低品質(LA-ICQ:31,x265:27)
 $quality_low=30
 
+#--------------------デュアルモノの判別--------------------
+#音声用のエンコード引数($audio_option)
+#デュアルモノ
+$audio_dualmono='-c:a aac -b:a 128k -filter_complex channelsplit'
+#通常
+#$audio_normal='-c:a aac -b:a 256k' 再エンコしたくない、安全ではある
+$audio_normal='-c:a copy'
+#$audio_normal='-c:a copy -bsf:a aac_adtstoasc' 信頼性が微妙
+
 #--------------------エンコード--------------------
 #一時的にmp4を吐き出すディレクトリ
 $tmp_folder_path='C:\DTV\tmp'
@@ -91,17 +100,21 @@ $tmp_folder_path='C:\DTV\tmp'
 $mp4_folder_path='C:\DTV\backupandsync'
 #例外時にts、ts.program.txt、ts.err、mp4を退避するディレクトリ(ループしてもffmpegの処理に失敗、mp4が10GBより大きい場合 etc…)
 $err_folder_path='C:\Users\sbn\Desktop'
-#mp4のファイルサイズ上限(GoogleDriveの10GB制限用、ローカル保存時には不要なので20GB等にすると良い)
-$mp4_max=10GB
+#mp4の10GBファイルサイズ上限 $True=有効 $False=無効
+$googledrive=$True
 #mp4用ffmpeg引数 使用可能:$audio_option(デュアルモノの判別)、$quality(tsファイルサイズ判別)、$pid_need(PID判別)
 function arg_mp4 {
     $script:file="${ffpath}\ffmpeg.exe"
+    #NVEnc
+    $script:arg="-y -hide_banner -nostats -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf bwdif=0:-1:1 -c:v h264_nvenc -preset:v slow -profile:v high -rc:v vbr_minqp -rc-lookahead 60 -spatial-aq 1 -aq-strength 1 -qmin:v 21 -qmax:v 24 -b:v 1500k -maxrate:v 3500k -pix_fmt yuv420p ${pid_need} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
     #QSV H.264 LA-ICQ
-    $script:arg="-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf bwdif=0:-1:1,pp=ac,hqdn3d=2.0 -global_quality ${quality} -c:v h264_qsv -preset:v veryslow -g 300 -bf 6 -refs 4 -b_strategy 1 -look_ahead 1 -look_ahead_depth 60 -pix_fmt nv12 -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${pid_need} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
+    #$script:arg="-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -ss 5 -i `"${env:FilePath}`" ${audio_option} -vf bwdif=0:-1:1,pp=ac,hqdn3d=2.0 -global_quality ${quality} -c:v h264_qsv -preset:v veryslow -g 300 -bf 6 -refs 4 -b_strategy 1 -look_ahead 1 -look_ahead_depth 60 -pix_fmt nv12 -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${pid_need} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
     #x265 fast
     #$script:arg="-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf bwdif=0:-1:1,pp=ac -c:v libx265 -crf ${quality} -preset:v fast -g 15 -bf 2 -refs 4 -pix_fmt yuv420p -bsf:v hevc_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${pid_need} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
-    #x265 bel9r
+    #x265 fast bel9r inspire
     #$script:arg="-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf bwdif=0:-1:1,pp=ac -c:v libx265 -preset:v fast -x265-params crf=${quality}:rc-lookahead=40:psy-rd=0.3:keyint=15:no-open-gop:bframes=2:rect=1:amp=1:me=umh:subme=3:ref=3:rd=3 -pix_fmt yuv420p -bsf:v hevc_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${pid_need} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
+    #x264 placebo by bel9r
+    #$script:arg="-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" ${audio_option} -vf bwdif=0:-1:1,pp=ac -c:v libx264 -preset:v placebo -x264-params crf=${quality}:rc-lookahead=60:qpmin=5:qpmax=40:qpstep=16:qcomp=0.85:mbtree=0:vbv-bufsize=31250:vbv-maxrate=25000:aq-strength=0.35:psy-rd=0.35:keyint=300:bframes=6:partitions=p8x8,b8x8,i8x8,i4x4:merange=64:ref=4:no-dct-decimate=1 -pix_fmt yuv420p -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${pid_need} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
 }
 
 #--------------------Twitter--------------------
@@ -159,7 +172,7 @@ function Post {
 
 #視聴予約なら終了
 if ($env:RecMode -eq 4) {
-    exit
+    return "視聴予約の為終了"
 }
 if ("${env:FilePath}" -eq $null) {
     $err_detail+="`n[EDCB] 録画失敗によりエンコード不可"
@@ -225,6 +238,7 @@ $balloon.Text=([string]($MyInvocation.MyCommand.Name) + ":${env:FileName}.ts").S
 $balloon.Visible=$True
 <#
 #ログ有効時、NotifyIconクリックでログを既定のテキストエディタで開く
+#エンコプロセスを非同期で実行する必要がある
 if ($log_toggle -eq 1) {
     $balloon.add_Click({
         if ($_.Button -eq [System.Windows.Forms.MouseButtons]::Left) {
@@ -336,71 +350,34 @@ Write-Output "quality:$quality"
 #====================デュアルモノの判別====================
 #番組情報ファイルがありデュアルモノという文字列があればTrue、文字列がない場合はFalse、番組情報ファイルが無ければNull
 if (Get-Content -LiteralPath "${env:FilePath}.program.txt" | Select-String -SimpleMatch 'デュアルモノ' -quiet) {
-    $audio_option='-c:a aac -b:a 128k -filter_complex channelsplit'
+    $audio_option=$audio_dualmono
 } else {
-    #$audio_option='-c:a aac -b:a 256k'
-    $audio_option='-c:a copy -bsf:a aac_adtstoasc'
+    $audio_option=$audio_normal
 }
 Write-Output "audio_option:$audio_option"
 
 #====================PIDの判別====================
-#前の番組、裏番組等の音声や映像のPIDを引数に入れないため
-#-analyzeduration 30M -probesize 100M -ss 20
-$StdErr=[string](&"${ffpath}\ffmpeg.exe" -hide_banner -nostats -i "${env:FilePath}" 2>&1)
-#スペース、CRを消す
-$StdErr=($StdErr -replace " ","")
-$StdErr=($StdErr -replace "`r","")
-#if x480だけの場合はx480、else x1080だけ・x480とx1080がある場合はx1080
-if (($StdErr -match 'x480') -And ($StdErr -notmatch 'x1080')) {
-    $res_need='x480'
-} else {
-    $res_need='x1080'
-}
-#LFで分割して配列として格納
-$StdErr=($StdErr -split "`n")
-#配列を展開(映像)
-foreach ($a in $StdErr) {
-    #'NoProgram'が含まれる行以降の行は不要とみなし抜ける
-    if ($a -match 'NoProgram') {
-        break
-    }
-    #"Video:"and"${res_need}"が含まれ、'none'が含まれない行の場合実行
-    if (($a -match "^(?=.*Video:)(?=.*${res_need})") -And ($a -notmatch 'none')) {
-        #引数に追記
-        $pid_need+=' -map i:0x'
-        #PIDの部分だけ切り取り
-        $pid_need+=($a -split '0x|]')[1]
+#PID引数の設定
+#ffprobeでcodec_type,height,idをソート
+$programs = [xml](&"$ffpath\ffprobe.exe" -v quiet -i "${env:FilePath}" -show_entries stream=codec_type,height,id,channels -print_format xml 2>&1)
+$programs.ffprobe.streams.stream
+$programs.ffprobe.streams.stream | foreach {
+    #xmlの要素はStringなのでintにする必要あり
+    #Videoから解像度の大きい方を選ぶ
+    if (($_.codec_type -eq "video") -And ($_.height -ne "0") -And ([int]($_.height) -gt [int]($otherheight)))
+    {
+        $otherheight = $_.height
+        $pid_need = "-map i:$($_.id)"
     }
 }
-#0x1なら音声も0x1**を選ぶ
-#0x2なら音声も0x2**を選ぶ
-if ("$pid_need" -match '0x1') {
-    $audio_need='0x1'
-} elseif ("$pid_need" -match '0x2') {
-    $audio_need='0x2'
-}
-#配列を展開(音声)
-foreach ($a in $StdErr) {
-    #'NoProgram'が含まれる行以降の行は不要とみなし抜ける
-    if ($a -match 'NoProgram') {
-        break
-    }
-    #"Audio:"and"${audio_need}"が含まれ、'0channels'が含まれない行の場合実行
-    if (($a -match "^(?=.*Audio:)(?=.*${audio_need})") -And ($a -notmatch '0channels')) {
-        #引数に追記
-        $pid_need+=' -map i:0x'
-        #PIDの部分だけ切り取り
-        $pid_need+=($a -split '0x|]')[1]
+#VideoのPIDの先頭(0x1..)がAudioの先頭と一致したら引数に追加
+$programs.ffprobe.streams.stream | foreach {
+    if (($_.codec_type -eq "audio") -And ($_.channels -ne "0") -And ($($_.id).Substring(0,3) -eq $pid_need.Substring(7,3)))
+    {
+        $pid_need += " -map i:$($_.id)"
     }
 }
 Write-Output "PID:$pid_need"
-#PID判別失敗の例外処理
-if ("$pid_need" -eq $null) {
-    Move
-    $err_detail+="`n[EDCB] PIDの判別不可"
-    $env:content="Error:${env:FileName}.ts${err_detail}"
-    Post
-}
 
 #====================エンコード====================
 #mp4用ffmpeg引数を遅延展開
@@ -435,7 +412,7 @@ Write-Output "ExitCode:$ExitCode"
 #Invoke-Processから渡された$StdErrからスペースを消す
 $StdErr=($StdErr -replace " ","")
 #ffmpegの終了コード、mp4のファイルサイズによる条件分岐
-if (($ExitCode -gt 0) -Or ($mp4_size -gt $mp4_max)) {
+if (($ExitCode -gt 0) -Or (($googledrive) -And ($mp4_size -gt 10GB))) {
     #ts、ts.program.txt、ts.err、mp4を退避
     TsSave
     #$StdErrをソートし投稿内容を決める
