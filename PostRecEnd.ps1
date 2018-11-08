@@ -1,4 +1,4 @@
-#181108
+#181109
 #_EDCBX_HIDE_
 #ファイル名をタイトルバーに表示
 #(Get-Host).UI.RawUI.WindowTitle="$($MyInvocation.MyCommand.Name):${env:FileName}.ts"
@@ -124,6 +124,8 @@ $googledrive=$True
 -Priority: プロセス優先度 MSDNのProcess.PriorityClass参照 (Normal,Idle,High,RealTime,BelowNormal,AboveNormal) 必須ではない
 -Affinity: 使用する論理コアの指定 MSDNのProcess.ProcessorAffinity参照 コア5(10000)～12(100000000000)を使用=0000111111110000(2進)=4080(10進)=0xFF0(16進) 必須ではない
 
+NVEnc H.264 VBR MinQP
+-Arg "-y -hide_banner -nostats -fflags +discardcorrupt -i `"${env:FilePath}`" ${ArgAudio} -vf bwdif=0:-1:1 -c:v h264_nvenc -preset:v slow -profile:v high -rc:v vbr_minqp -rc-lookahead 60 -spatial-aq 1 -aq-strength 1 -qmin:v 23 -qmax:v 25 -b:v 1500k -maxrate:v 3500k -pix_fmt yuv420p ${ArgPid} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
 QSV H.264 LA-ICQ
 -Arg "-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -ss 5 -i `"${env:FilePath}`" ${ArgAudio} -vf bwdif=0:-1:1,pp=ac,hqdn3d=2.0 -global_quality ${ArgQual} -c:v h264_qsv -preset:v veryslow -g 300 -bf 6 -refs 4 -b_strategy 1 -look_ahead 1 -look_ahead_depth 60 -pix_fmt nv12 -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${ArgPid} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
 x265 fast
@@ -134,8 +136,8 @@ x264 placebo by bel9r
 -Arg "-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" ${ArgAudio} -vf bwdif=0:-1:1,pp=ac -c:v libx264 -preset:v placebo -x264-params crf=${ArgQual}:rc-lookahead=60:qpmin=5:qpmax=40:qpstep=16:qcomp=0.85:mbtree=0:vbv-bufsize=31250:vbv-maxrate=25000:aq-strength=0.35:psy-rd=0.35:keyint=300:bframes=6:partitions=p8x8,b8x8,i8x8,i4x4:merange=64:ref=4:no-dct-decimate=1 -pix_fmt yuv420p -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${ArgPid} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
 #>
 function VideoEncode {
-    #NVEnc H.264 VBR MinQP (おや？ノイズ除去フィルタが使われていませんね...ルータみたいな名前のコンロを買っちったと聞きましたが...NVEncが進化したとかなんとか...)
-    Invoke-Process -File "${ffpath}\ffmpeg.exe" -Arg "-y -hide_banner -nostats -fflags +discardcorrupt -i `"${env:FilePath}`" ${ArgAudio} -vf bwdif=0:-1:1 -c:v h264_nvenc -preset:v slow -profile:v high -rc:v vbr_minqp -rc-lookahead 60 -spatial-aq 1 -aq-strength 1 -qmin:v 23 -qmax:v 25 -b:v 1500k -maxrate:v 3500k -pix_fmt yuv420p ${ArgPid} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`"" -Priority 'BelowNormal' -Affinity '0xFFC'
+    #NVEnc HEVC VBR MinQP (おや？ノイズ除去フィルタが使われていませんね...ルータみたいな名前のコンロを買っちったと聞きましたが...NVEncが進化したとかなんとか...)
+    Invoke-Process -File "${ffpath}\ffmpeg.exe" -Arg "-y -hide_banner -nostats -fflags +discardcorrupt -i `"${env:FilePath}`" ${ArgAudio} -vf bwdif=0:-1:1 -c:v hevc_nvenc -preset:v slow -profile:v main -rc:v vbr_minqp -rc-lookahead 60 -spatial-aq 1 -aq-strength 1 -qmin:v 23 -qmax:v 25 -b:v 1500k -maxrate:v 3500k -pix_fmt yuv420p ${ArgPid} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`"" -Priority 'BelowNormal' -Affinity '0xFFC'
 }
 
 #--------------------Post--------------------
@@ -219,20 +221,18 @@ function Post {
         }
     }
     #BalloonTip
-    if ($discord_toggle) {
-        if ($balloontip_toggle) {
-            #特定のTipIconのみを使用可
-            #[System.Windows.Forms.ToolTipIcon] | Get-Member -Static -Type Property
-            $balloon.BalloonTipIcon=[System.Windows.Forms.ToolTipIcon]::$tipicon
-            #表示するタイトル
-            $balloon.BalloonTipTitle=$tiptitle
-            #表示するメッセージ
-            $balloon.BalloonTipText=$content
-            #balloontip_toggle=1なら5000ミリ秒バルーンチップ表示
-            $balloon.ShowBalloonTip(5000)
-            #5秒待って
-            Start-Sleep -Seconds 5
-        }
+    if ($balloontip_toggle) {
+        #特定のTipIconのみを使用可
+        #[System.Windows.Forms.ToolTipIcon] | Get-Member -Static -Type Property
+        $balloon.BalloonTipIcon=[System.Windows.Forms.ToolTipIcon]::$tipicon
+        #表示するタイトル
+        $balloon.BalloonTipTitle=$tiptitle
+        #表示するメッセージ
+        $balloon.BalloonTipText=$content
+        #balloontip_toggle=1なら5000ミリ秒バルーンチップ表示
+        $balloon.ShowBalloonTip(5000)
+        #5秒待って
+        Start-Sleep -Seconds 5
     }
     #タスクトレイアイコン非表示(異常終了時は実行されずトレイに亡霊が残る仕様)
     $balloon.Visible=$False
