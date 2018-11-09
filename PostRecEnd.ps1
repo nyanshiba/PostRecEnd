@@ -1,4 +1,4 @@
-#181109
+#181109_1130
 #_EDCBX_HIDE_
 #ファイル名をタイトルバーに表示
 #(Get-Host).UI.RawUI.WindowTitle="$($MyInvocation.MyCommand.Name):${env:FileName}.ts"
@@ -39,6 +39,9 @@ $Size=200GB
 $Size="200GB"
 $Size=0.2TB
 #>
+
+#ffmpeg.exe、ffprobe.exeがあるディレクトリ
+$ffpath='C:\DTV\ffmpeg'
 
 #--------------------ログ--------------------
 #$False=無効、$True=有効
@@ -105,8 +108,6 @@ $audio_normal='-c:a copy' #エラーは出るが失敗しない
 
 #--------------------PIDの判別--------------------
 #必要なPIDを取得し-map引数に加える($ArgPid)
-#ffmpeg.exe、ffprobe.exeがあるディレクトリ
-$ffpath='C:\DTV\ffmpeg'
 
 #--------------------エンコード--------------------
 #mp4の一時出力ディレクトリ
@@ -136,8 +137,8 @@ x264 placebo by bel9r
 -Arg "-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" ${ArgAudio} -vf bwdif=0:-1:1,pp=ac -c:v libx264 -preset:v placebo -x264-params crf=${ArgQual}:rc-lookahead=60:qpmin=5:qpmax=40:qpstep=16:qcomp=0.85:mbtree=0:vbv-bufsize=31250:vbv-maxrate=25000:aq-strength=0.35:psy-rd=0.35:keyint=300:bframes=6:partitions=p8x8,b8x8,i8x8,i4x4:merange=64:ref=4:no-dct-decimate=1 -pix_fmt yuv420p -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${ArgPid} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
 #>
 function VideoEncode {
-    #NVEnc HEVC VBR MinQP (おや？ノイズ除去フィルタが使われていませんね...ルータみたいな名前のコンロを買っちったと聞きましたが...NVEncが進化したとかなんとか...)
-    Invoke-Process -File "${ffpath}\ffmpeg.exe" -Arg "-y -hide_banner -nostats -fflags +discardcorrupt -i `"${env:FilePath}`" ${ArgAudio} -vf bwdif=0:-1:1 -c:v hevc_nvenc -preset:v slow -profile:v main -rc:v vbr_minqp -rc-lookahead 60 -spatial-aq 1 -aq-strength 1 -qmin:v 23 -qmax:v 25 -b:v 1500k -maxrate:v 3500k -pix_fmt yuv420p ${ArgPid} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`"" -Priority 'BelowNormal' -Affinity '0xFFC'
+    #NVEnc HEVC ConstQP  (おや？ノイズ除去フィルタが使われていませんね...ルータみたいな名前のコンロを買っちったと聞きましたが...NVEncが進化したとかなんとか...)
+    Invoke-Process -File "${ffpath}\ffmpeg.exe" -Arg "-y -hide_banner -nostats -fflags +discardcorrupt -i `"${env:FilePath}`" ${ArgAudio} -vf bwdif=0:-1:1 -c:v hevc_nvenc -preset:v slow -profile:v main -rc:v constqp -rc-lookahead 60 -spatial-aq 1 -aq-strength 1 -bf 0 -qmin:v 23 -qmax:v 25 -pix_fmt yuv420p ${ArgPid} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`"" -Priority 'BelowNormal' -Affinity '0xFFC'
 }
 
 #--------------------Post--------------------
