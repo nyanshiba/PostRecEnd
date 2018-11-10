@@ -1,4 +1,4 @@
-#181109_1130
+#181110
 #_EDCBX_HIDE_
 #ファイル名をタイトルバーに表示
 #(Get-Host).UI.RawUI.WindowTitle="$($MyInvocation.MyCommand.Name):${env:FileName}.ts"
@@ -137,13 +137,13 @@ x264 placebo by bel9r
 -Arg "-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" ${ArgAudio} -vf bwdif=0:-1:1,pp=ac -c:v libx264 -preset:v placebo -x264-params crf=${ArgQual}:rc-lookahead=60:qpmin=5:qpmax=40:qpstep=16:qcomp=0.85:mbtree=0:vbv-bufsize=31250:vbv-maxrate=25000:aq-strength=0.35:psy-rd=0.35:keyint=300:bframes=6:partitions=p8x8,b8x8,i8x8,i4x4:merange=64:ref=4:no-dct-decimate=1 -pix_fmt yuv420p -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${ArgPid} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
 #>
 function VideoEncode {
-    #NVEnc HEVC ConstQP  (おや？ノイズ除去フィルタが使われていませんね...ルータみたいな名前のコンロを買っちったと聞きましたが...NVEncが進化したとかなんとか...)
-    Invoke-Process -File "${ffpath}\ffmpeg.exe" -Arg "-y -hide_banner -nostats -fflags +discardcorrupt -i `"${env:FilePath}`" ${ArgAudio} -vf bwdif=0:-1:1 -c:v hevc_nvenc -preset:v slow -profile:v main -rc:v constqp -rc-lookahead 60 -spatial-aq 1 -aq-strength 1 -bf 0 -qmin:v 23 -qmax:v 25 -pix_fmt yuv420p ${ArgPid} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`"" -Priority 'BelowNormal' -Affinity '0xFFC'
+    #NVEnc HEVC VBR_HQ  (おや？ノイズ除去フィルタが使われていませんね...ルータみたいな名前のコンロを買っちったと聞きましたが...NVEncが進化したとかなんとか...)
+    Invoke-Process -File "${ffpath}\ffmpeg.exe" -Arg "-y -hide_banner -nostats -fflags +discardcorrupt -i `"${env:FilePath}`" ${ArgAudio} -vf bwdif=0:-1:1 -c:v hevc_nvenc -preset:v slow -profile:v main -rc:v vbr_hq -rc-lookahead 32 -no-scenecut 1 -spatial-aq 1 -aq-strength 4 -qmin:v 23 -qmax:v 25 -b:v 1500k -maxrate:v 4000k -bf 3 -pix_fmt yuv420p ${ArgPid} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`"" -Priority 'BelowNormal' -Affinity '0xFFC'
 }
 
 #--------------------Post--------------------
 #$False=Error時のみ、$True=常時 Twitter、DiscordにPost
-$InfoPostToggle=$True
+$InfoPostToggle=$False
 
 #Twitter機能 $False=無効、$True=有効
 $tweet_toggle=$True
@@ -157,7 +157,7 @@ $env:ssl_cert_file='C:\DTV\EDCB\cacert.pem'
 #Discord機能 $False=無効、$True=有効
 $discord_toggle=$True
 #webhook url
-$hookUrl='https://discordapp.com/api/webhooks/XXXXXXXXXX'
+$hookUrl='https://discordapp.com/api/webhooks/466346185456746506/6DvzeWQVXT7oqUVCu5T4fN_ShkgVkXpvy-r4_ztxQPgfaJJtCM_FM-HjQc5CAZDu49Ok'
 
 #BalloonTip機能 $False=無効、$True=有効
 $balloontip_toggle=$True
@@ -175,7 +175,8 @@ $balloontip_toggle=$True
 ・[-c:a copy] PIDの判別に失敗: -c:a copy時。上に同じ。
 ・[-c:a aac] PIDの判別に失敗？ ExitCode:0: -c:a aac時。ffmpegの終了コードは0だが異常がある？場合。
 ・[-c:a copy] -c:a aacか-ss 1で治るやつ ExitCode:0: -c:a copy時。上に同じ。
-・不明なエラー: それ以外
+・[FFmpeg] 無効な引数
+・不明なエラー
 #>
 
 #########################################################################################################################
@@ -483,20 +484,29 @@ $PostFileSize
 #Invoke-Processから渡された$StdErrからスペースを消す
 $StdErr=($StdErr -replace " ","")
 #ffmpegの終了コード、mp4のファイルサイズによる条件分岐
-if (($ExitCode -gt 0) -Or (($googledrive) -And ($mp4_size -gt 10GB))) {
-    #$StdErrをソートし投稿内容を決める
-    switch ($StdErr) {
-        {$mp4_size -gt $mp4_max} {$err_detail+="`n[GoogleDrive] 10GB以上の為アップロードできません"}
+if ($ExitCode -gt 0)
+{
+    #$StdErrをソートしPost内容を決める
+    switch ($StdErr)
+    {
         {$_ -match 'Errorduringencoding:devicefailed'} {$err_detail+="`n[h264_qsv] device failed (-17)"}
         {$_ -match 'Couldnotfindcodecparameters'} {$err_detail+="`n[mpegts] PIDの判別に失敗"}
         {$_ -match 'Unsupportedchannellayout'} {$err_detail+="`n[aac] 非対応のチャンネルレイアウト"}
         {$_ -match 'Toomanypacketsbuffered'} {$err_detail+="`n[-c:a aac] PIDの判別に失敗"}
         {$_ -match 'Inputpackettoosmall'} {$err_detail+="`n[-c:a copy] PIDの判別に失敗"}
+        {$_ -match 'Invalidargument'} {$err_detail+="`n[FFmpeg] 無効な引数"}
         default {$err_detail+="`n不明なエラー"}
     }
     #Twitter、Discord、BalloonTip
     Post -Exc $True -Toggle $True -Content "Error:${env:FileName}.ts${err_detail}${PostFileSize}" -TipIcon 'Error' -TipTitle 'エンコード失敗'
-} else {
+} elseif (($googledrive) -And ($mp4_size -gt 10GB))
+{
+    #Post内容
+    $err_detail+="`n[GoogleDrive] 10GB以上の為アップロードできません"
+    #Twitter、Discord、BalloonTip
+    Post -Exc $True -Toggle $True -Content "Error:${env:FileName}.ts${err_detail}${PostFileSize}" -TipIcon 'Error' -TipTitle 'アップロード失敗'
+} else
+{
     #mp4をmp4_folder_pathに投げる
     Move-Item -LiteralPath "$tmp_folder_path\$env:FileName.mp4" "$mp4_folder_path"
     #エラーメッセージが格納されていればTipIconをWarningに変える
