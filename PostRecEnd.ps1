@@ -1,4 +1,4 @@
-#181110
+#181206
 #_EDCBX_HIDE_
 #ファイル名をタイトルバーに表示
 #(Get-Host).UI.RawUI.WindowTitle="$($MyInvocation.MyCommand.Name):${env:FileName}.ts"
@@ -47,21 +47,21 @@ $ffpath='C:\DTV\ffmpeg'
 #$False=無効、$True=有効
 $log_toggle=$True
 #ログ出力ディレクトリ
-$log_path='C:\DTV\EncLog'
+$log_path='C:\Rec\EncLog'
 #ログを残す数
-$logcnt_max=500
+$logcnt_max=1000
 
 #--------------------tsの自動削除--------------------
 #閾値を超過した場合、$False=容量警告、$True=tsを自動削除
 $TsFolderRound=$True
 #録画フォルダの上限
-$ts_folder_max=200GB
+$ts_folder_max=150GB
 
 #--------------------mp4の自動削除--------------------
 #閾値を超過した場合、$False=容量警告、$True=mp4を自動削除
 $Mp4FolderRound=$True
 #mp4用フォルダの上限
-$mp4_folder_max=50GB
+$mp4_folder_max=25GB
 
 #--------------------jpg出力--------------------
 #$True=有効 $False=無効
@@ -69,7 +69,7 @@ $jpg_toggle=$True
 #連番jpgを出力するフォルダ用のディレクトリ
 $jpg_path='C:\Users\sbn\Desktop\TVTest'
 #jpg出力したい自動予約キーワード(常にjpg出力する場合: $jpg_addkey='')
-$jpg_addkey='インターミッション|宇宙戦艦ヤマト|とある魔術の禁書目録|アリシゼーション|beatless'
+$jpg_addkey='インターミッション|やがて君になる|宇宙戦艦ヤマト|アリシゼーション|beatless'
 #自動予約キーワードに引っ掛かった場合に実行するコード 使用可能:$ArgScale(横が1440pxの場合のみ",scale=1920:1080"が格納される。画像にはSARとか無いので)
 function ImageEncode {
     #連番jpg出力する例
@@ -91,16 +91,16 @@ function ImageEncode {
 #適応品質機能 $False=無効(エンコード引数内に記述)、$True=通常・低品質を閾値で切り替え
 $tssize_toggle=$False
 #通常品質(LA-ICQ:27,x265:25)
-$quality_normal="ビットレートや引数ごと記述しても構わない"
+$quality_normal='-qp:v 23'
 #閾値
 $tssize_max=20GB #くらいがおすすめ
 #低品質(LA-ICQ:30,x265:27)
-$quality_low="int(数値)はダブルクオート無しで良いが、string(文字列)はダブルクォートやシングルクォート必須"
+$quality_low='-qp:v 24'
 
 #--------------------デュアルモノの判別--------------------
 #音声引数をデュアルモノか否かで変える($ArgAudio)
 #デュアルモノ
-$audio_dualmono='-c:a aac -b:a 128k -filter_complex channelsplit'
+$audio_dualmono='-c:a aac -b:a 128k -ac 1 -filter_complex channelsplit'
 #通常
 $audio_normal='-c:a copy' #エラーは出るが失敗しない
 #$audio_normal='-c:a aac -b:a 256k' 再エンコ
@@ -111,11 +111,11 @@ $audio_normal='-c:a copy' #エラーは出るが失敗しない
 
 #--------------------エンコード--------------------
 #mp4の一時出力ディレクトリ
-$tmp_folder_path='C:\DTV\tmp'
+$tmp_folder_path='C:\Rec\tmp'
 #mp4保存(Backup and Sync、ローカル保存)用ディレクトリ
-$mp4_folder_path='C:\DTV\backupandsync'
+$mp4_folder_path='C:\Rec\mp4'
 #例外ディレクトリ(ループしてもffmpegの処理に失敗、mp4が10GBより大きい場合 etc…にts、ts.program.txt、ts.err、mp4を退避)
-$err_folder_path='C:\Users\sbn\Desktop'
+$err_folder_path='C:\Rec\Err'
 #mp4の10GBファイルサイズ上限 $True=有効 $False=無効
 $googledrive=$True
 #mp4用ffmpeg引数 
@@ -126,7 +126,7 @@ $googledrive=$True
 -Affinity: 使用する論理コアの指定 MSDNのProcess.ProcessorAffinity参照 コア5(10000)～12(100000000000)を使用=0000111111110000(2進)=4080(10進)=0xFF0(16進) 必須ではない
 
 NVEnc H.264 VBR MinQP
--Arg "-y -hide_banner -nostats -fflags +discardcorrupt -i `"${env:FilePath}`" ${ArgAudio} -vf bwdif=0:-1:1 -c:v h264_nvenc -preset:v slow -profile:v high -rc:v vbr_minqp -rc-lookahead 60 -spatial-aq 1 -aq-strength 1 -qmin:v 23 -qmax:v 25 -b:v 1500k -maxrate:v 3500k -pix_fmt yuv420p ${ArgPid} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
+-Arg "-y -hide_banner -nostats -fflags +discardcorrupt -i `"${env:FilePath}`" ${ArgAudio} -vf bwdif=0:-1:1 -c:v h264_nvenc -preset:v slow -profile:v high -rc:v vbr_minqp -rc-lookahead 32 -spatial-aq 1 -aq-strength 1 -qmin:v 23 -qmax:v 25 -b:v 1500k -maxrate:v 3500k -pix_fmt yuv420p ${ArgPid} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
 QSV H.264 LA-ICQ
 -Arg "-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -ss 5 -i `"${env:FilePath}`" ${ArgAudio} -vf bwdif=0:-1:1,pp=ac,hqdn3d=2.0 -global_quality ${ArgQual} -c:v h264_qsv -preset:v veryslow -g 300 -bf 6 -refs 4 -b_strategy 1 -look_ahead 1 -look_ahead_depth 60 -pix_fmt nv12 -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${ArgPid} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
 x265 fast
@@ -137,8 +137,8 @@ x264 placebo by bel9r
 -Arg "-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" ${ArgAudio} -vf bwdif=0:-1:1,pp=ac -c:v libx264 -preset:v placebo -x264-params crf=${ArgQual}:rc-lookahead=60:qpmin=5:qpmax=40:qpstep=16:qcomp=0.85:mbtree=0:vbv-bufsize=31250:vbv-maxrate=25000:aq-strength=0.35:psy-rd=0.35:keyint=300:bframes=6:partitions=p8x8,b8x8,i8x8,i4x4:merange=64:ref=4:no-dct-decimate=1 -pix_fmt yuv420p -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${ArgPid} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
 #>
 function VideoEncode {
-    #NVEnc HEVC VBR_HQ  (おや？ノイズ除去フィルタが使われていませんね...ルータみたいな名前のコンロを買っちったと聞きましたが...NVEncが進化したとかなんとか...)
-    Invoke-Process -File "${ffpath}\ffmpeg.exe" -Arg "-y -hide_banner -nostats -fflags +discardcorrupt -i `"${env:FilePath}`" ${ArgAudio} -vf bwdif=0:-1:1 -c:v hevc_nvenc -preset:v slow -profile:v main -rc:v vbr_hq -rc-lookahead 32 -no-scenecut 1 -spatial-aq 1 -aq-strength 4 -qmin:v 23 -qmax:v 25 -b:v 1500k -maxrate:v 4000k -bf 3 -pix_fmt yuv420p ${ArgPid} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`"" -Priority 'BelowNormal' -Affinity '0xFFC'
+    #NVEnc HEVC Constant QP  (おや？ノイズ除去フィルタが使われていませんね...ルータみたいな名前のコンロを買っちったと聞きましたが...NVEncが進化したとかなんとか...)
+    Invoke-Process -File "${ffpath}\ffmpeg.exe" -Arg "-y -v verbose -hide_banner -nostats -fflags +discardcorrupt -i `"${env:FilePath}`" ${ArgAudio} -vf bwdif=0:-1:1 -c:v hevc_nvenc -preset:v slow -profile:v main -rc:v constqp ${ArgQual} -refs 6 -bf 3 -pix_fmt yuv420p ${ArgPid} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`"" -Priority 'BelowNormal' -Affinity '0xFFC'
 }
 
 #--------------------Post--------------------
@@ -157,7 +157,7 @@ $env:ssl_cert_file='C:\DTV\EDCB\cacert.pem'
 #Discord機能 $False=無効、$True=有効
 $discord_toggle=$True
 #webhook url
-$hookUrl='https://discordapp.com/api/webhooks/466346185456746506/6DvzeWQVXT7oqUVCu5T4fN_ShkgVkXpvy-r4_ztxQPgfaJJtCM_FM-HjQc5CAZDu49Ok'
+$hookUrl='https://discordapp.com/api/webhooks/XXXXXXXXXX'
 
 #BalloonTip機能 $False=無効、$True=有効
 $balloontip_toggle=$True
@@ -265,40 +265,46 @@ function Invoke-Process {
     #ProcessStartInfoクラスをインスタンス化
     $psi=New-Object System.Diagnostics.ProcessStartInfo
     #アプリケーションファイル名
-    $psi.FileName=$file
+    $psi.FileName = $file
     #引数
-    $psi.Arguments=$arg
+    $psi.Arguments = $arg
     #標準エラー出力だけを同期出力(注意:$trueは1つだけにしないとデッドロックします)
-    $psi.UseShellExecute=$false
-    $psi.RedirectStandardInput=$false
-    $psi.RedirectStandardOutput=$false
-    $psi.RedirectStandardError=$true
-    $psi.WindowStyle=[System.Diagnostics.ProcessWindowStyle]::Hidden
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardInput = $false
+    $psi.RedirectStandardOutput = $false
+    $psi.RedirectStandardError = $true
+    $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
 
     #実行
     #Processクラスをインスタンス化
     $p=New-Object System.Diagnostics.Process
     #設定を読み込む
-    $p.StartInfo=$psi
+    $p.StartInfo = $psi
     #プロセス開始
-    $p.Start() | Out-Null
+    $p.Start() > Out-Null
     #プロセッサ親和性
     if ($affinity)
     {
         #(Get-Process -Id $p.Id).ProcessorAffinity=[int]"$Affinity"
-        $p.ProcessorAffinity=[int]"$affinity"
+        $p.ProcessorAffinity = [int]"$affinity"
     }
     #プロセス優先度
     if ($priority)
     {
-        $p.PriorityClass=$priority
+        $p.PriorityClass = $priority
+    }
+    #標準エラー出力をプロセス終了まで読む
+    $script:StdErr = $Null
+    while (!$p.HasExited)
+    {
+        $script:StdErr += "$($p.StandardError.ReadLine())`n"
     }
     #プロセスの標準エラー出力を変数に格納(注意:WaitForExitの前に書かないとデッドロックします)
-    $script:StdErr=$p.StandardError.ReadToEnd()
+    #$script:StdErr=$p.StandardError.ReadToEnd()
     #プロセス終了まで待機
-    $p.WaitForExit()
+    #$p.WaitForExit()
     #終了コードを変数に格納
-    $script:ExitCode=$p.ExitCode
+    $script:ExitCode = $p.ExitCode
     #リソースを開放
     $p.Close()
 }
@@ -319,17 +325,17 @@ switch (("$($MyInvocation.MyCommand.Name):${env:FileName}.ts").Length) {
 $balloon.Text=([string]($MyInvocation.MyCommand.Name) + ":${env:FileName}.ts").SubString(0,$TextLength)
 #タスクトレイアイコン表示
 $balloon.Visible=$True
-<#
+
 #ログ有効時、NotifyIconクリックでログを既定のテキストエディタで開く
-#エンコプロセスを非同期で実行する必要がある
-if ($log_toggle -eq 1) {
+if ($log_toggle)
+{
     $balloon.add_Click({
-        if ($_.Button -eq [System.Windows.Forms.MouseButtons]::Left) {
+        if ($_.Button -eq [System.Windows.Forms.MouseButtons]::Left)
+        {
             &"${log_path}\${env:FileName}.txt"
         }
     })
 }
-#>
 
 #====================ログ====================
 #ログのソート例: (sls -path "$log_path\*.txt" 'faild' -SimpleMatch).Path
