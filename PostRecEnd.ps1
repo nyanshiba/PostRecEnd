@@ -1,4 +1,4 @@
-#181206
+#181212
 #_EDCBX_HIDE_
 #ファイル名をタイトルバーに表示
 #(Get-Host).UI.RawUI.WindowTitle="$($MyInvocation.MyCommand.Name):${env:FileName}.ts"
@@ -11,12 +11,15 @@
 X だめ
 $Toggle= イコール残したままにしない！テストでXにされるよ！
 O おk
-$Toggle=$True 
-$toggle=$true 大文字小文字の区別はない
+$Toggle=$False 無効
+$Toggle=$false 大文字小文字の区別はない
+$Toggle=0 無効
+$Toggle=$True 有効
+$Toggle=1 有効
 $Toggle = $true =や+=の前後にスペースがあっても良い(コーディング的にはこっちが推奨っぽい)
-$Toggle
-$Toggle=$Null
-#$Toggle
+$Toggle 空欄
+$Toggle=$Null null
+#$Toggle コメント
 
 X だめ
 $Path=C:\DTV\EncLog エラー出る
@@ -29,14 +32,19 @@ X だめ
 $Arg='-quality $ArgQual' シングルクォートでは'$ArgQual'という文字列になってしまうので変数の中身が展開されないよ！
 $Arg="-vf bwdif=0:-1:1$ArgScale" 変数名とコードが紛らわしいよ！
 $Arg="-i "${FilePath}"" ダブルクオートの範囲が滅茶滅茶だよ><
+$Arg='-i "${FilePath}"' 変数が展開されないよ！
 O おk
 $Arg="-quality $ArgQual" ダブルクォートでは変数の中身が展開される
 $Arg="-vf bwdif=0:-1:1${ArgScale}" ${}を使おう
 $Arg="-i `"${FilePath}`"" バッククオート`でエスケープしよう
 
+X だめ
+$logcnt_max="1000" こういうのはString(文字列)じゃないよ！int(数値)だよ！
 O おk
+$logcnt_max=1000
+$logcnt_max=[int]"1000"
 $Size=200GB
-$Size="200GB"
+$Size="200GB" OKらしい(^^;;
 $Size=0.2TB
 #>
 
@@ -86,16 +94,16 @@ function ImageEncode {
     Copy-Item -LiteralPath "${env:FilePath}" "D:\tsfiles" -ErrorAction SilentlyContinue
 }
 
-#--------------------tsファイルサイズ--------------------
+#--------------------tsファイルサイズ判別--------------------
 #映像の品質引数をtsファイルサイズによって適応的に変える($ArgQual)
 #適応品質機能 $False=無効(エンコード引数内に記述)、$True=通常・低品質を閾値で切り替え
-$tssize_toggle=$False
-#通常品質(LA-ICQ:27,x265:25)
-$quality_normal='-qp:v 23'
+$tssize_toggle=$True
 #閾値
 $tssize_max=20GB #くらいがおすすめ
+#通常品質(LA-ICQ:27,x265:25)
+$quality_normal='-init_qpI 23 -init_qpP 27 -init_qpB 27'
 #低品質(LA-ICQ:30,x265:27)
-$quality_low='-qp:v 24'
+$quality_low='-init_qpI 25 -init_qpP 30 -init_qpB 32'
 
 #--------------------デュアルモノの判別--------------------
 #音声引数をデュアルモノか否かで変える($ArgAudio)
@@ -120,10 +128,13 @@ $err_folder_path='C:\Rec\Err'
 $googledrive=$True
 #mp4用ffmpeg引数 
 <#
--File: 実行ファイルパス
--Arg: 引数 使用可能:$ArgAudio(エンコ失敗しない為に必須)、$ArgQual(エンコード引数内に記述し品質やビットレートを固定する場合不要)、$ArgPid(エンコ失敗しない為に必須)
--Priority: プロセス優先度 MSDNのProcess.PriorityClass参照 (Normal,Idle,High,RealTime,BelowNormal,AboveNormal) 必須ではない
--Affinity: 使用する論理コアの指定 MSDNのProcess.ProcessorAffinity参照 コア5(10000)～12(100000000000)を使用=0000111111110000(2進)=4080(10進)=0xFF0(16進) 必須ではない
+-File: 実行ファイルのパス
+-Arg: 引数
+    $ArgAudio(エンコ失敗しない為に必須)
+    $ArgQual(エンコード引数内に記述し品質やビットレートを固定する場合不要)
+    $ArgPid(エンコ失敗しない為に必須)
+-Priority: プロセス優先度 MSDNのProcess.PriorityClass参照 (Normal,Idle,High,RealTime,BelowNormal,AboveNormal) ※必須ではない
+-Affinity: 使用する論理コアの指定 MSDNのProcess.ProcessorAffinity参照 コア5(10000)～12(100000000000)を使用=0000111111110000(2進)=4080(10進)=0xFF0(16進) ※必須ではない
 
 NVEnc H.264 VBR MinQP
 -Arg "-y -hide_banner -nostats -fflags +discardcorrupt -i `"${env:FilePath}`" ${ArgAudio} -vf bwdif=0:-1:1 -c:v h264_nvenc -preset:v slow -profile:v high -rc:v vbr_minqp -rc-lookahead 32 -spatial-aq 1 -aq-strength 1 -qmin:v 23 -qmax:v 25 -b:v 1500k -maxrate:v 3500k -pix_fmt yuv420p ${ArgPid} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
@@ -137,8 +148,8 @@ x264 placebo by bel9r
 -Arg "-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" ${ArgAudio} -vf bwdif=0:-1:1,pp=ac -c:v libx264 -preset:v placebo -x264-params crf=${ArgQual}:rc-lookahead=60:qpmin=5:qpmax=40:qpstep=16:qcomp=0.85:mbtree=0:vbv-bufsize=31250:vbv-maxrate=25000:aq-strength=0.35:psy-rd=0.35:keyint=300:bframes=6:partitions=p8x8,b8x8,i8x8,i4x4:merange=64:ref=4:no-dct-decimate=1 -pix_fmt yuv420p -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${ArgPid} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
 #>
 function VideoEncode {
-    #NVEnc HEVC Constant QP  (おや？ノイズ除去フィルタが使われていませんね...ルータみたいな名前のコンロを買っちったと聞きましたが...NVEncが進化したとかなんとか...)
-    Invoke-Process -File "${ffpath}\ffmpeg.exe" -Arg "-y -v verbose -hide_banner -nostats -fflags +discardcorrupt -i `"${env:FilePath}`" ${ArgAudio} -vf bwdif=0:-1:1 -c:v hevc_nvenc -preset:v slow -profile:v main -rc:v constqp ${ArgQual} -refs 6 -bf 3 -pix_fmt yuv420p ${ArgPid} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`"" -Priority 'BelowNormal' -Affinity '0xFFC'
+    #hevc_nvenc constqp (qpI,P,Bはtsファイルサイズ判別を参照)
+    Invoke-Process -File "${ffpath}\ffmpeg.exe" -Arg "-y -v verbose -hide_banner -nostats -fflags +discardcorrupt -i `"${env:FilePath}`" $ArgAudio -vf bwdif=0:-1:1 -c:v hevc_nvenc -preset:v slow -profile:v main -rc:v constqp $ArgQual -refs 6 -bf 3 -pix_fmt yuv420p $ArgPid -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`"" -Priority 'BelowNormal' -Affinity '0xFFC'
 }
 
 #--------------------Post--------------------
@@ -281,7 +292,7 @@ function Invoke-Process {
     #設定を読み込む
     $p.StartInfo = $psi
     #プロセス開始
-    $p.Start() > Out-Null
+    $p.Start() > $Null
     #プロセッサ親和性
     if ($affinity)
     {
