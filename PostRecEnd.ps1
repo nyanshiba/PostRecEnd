@@ -169,7 +169,7 @@ $env:ssl_cert_file='C:\DTV\EDCB\cacert.pem'
 #Discord機能 $False=無効、$True=有効
 $discord_toggle=$True
 #webhook url
-$hookUrl='https://discordapp.com/api/webhooks/510813878956064768/YU68YW3Z3lHqnZt0vrOMgEB8JufWsNtU318MqxRP-aXS9VJTqX6bzHRvQEgftuWvGYPi'
+$hookUrl='https://discordapp.com/api/webhooks/XXXXXXXXXX'
 
 #BalloonTip機能 $False=無効、$True=有効
 $balloontip_toggle=$True
