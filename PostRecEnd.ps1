@@ -1,4 +1,4 @@
-#181212
+#190101
 #_EDCBX_HIDE_
 #ファイル名をタイトルバーに表示
 #(Get-Host).UI.RawUI.WindowTitle="$($MyInvocation.MyCommand.Name):${env:FileName}.ts"
@@ -57,19 +57,19 @@ $log_toggle=$True
 #ログ出力ディレクトリ
 $log_path='C:\Rec\EncLog'
 #ログを残す数
-$logcnt_max=1000
+$logcnt_max=500
 
 #--------------------tsの自動削除--------------------
 #閾値を超過した場合、$False=容量警告、$True=tsを自動削除
 $TsFolderRound=$True
 #録画フォルダの上限
-$ts_folder_max=150GB
+$ts_folder_max=100GB
 
 #--------------------mp4の自動削除--------------------
 #閾値を超過した場合、$False=容量警告、$True=mp4を自動削除
 $Mp4FolderRound=$True
 #mp4用フォルダの上限
-$mp4_folder_max=25GB
+$mp4_folder_max=50GB
 
 #--------------------jpg出力--------------------
 #$True=有効 $False=無効
@@ -77,7 +77,7 @@ $jpg_toggle=$True
 #連番jpgを出力するフォルダ用のディレクトリ
 $jpg_path='C:\Users\sbn\Desktop\TVTest'
 #jpg出力したい自動予約キーワード(常にjpg出力する場合: $jpg_addkey='')
-$jpg_addkey='インターミッション|やがて君になる|宇宙戦艦ヤマト|アリシゼーション|beatless'
+$jpg_addkey='インターミッション|やがて君になる|宇宙戦艦ヤマト|アリシゼーション|beatless|ハイスクール・フリート|灰と幻想のグリムガル|デート・ア・ライブ|ダンジョンに出会いを求める|荒野のコトブキ飛行隊|山田くんと7人の魔女|冴えない彼女の育てかた|キルラキル|サイコパス|PSYCHO|鬼滅の刃'
 #自動予約キーワードに引っ掛かった場合に実行するコード 使用可能:$ArgScale(横が1440pxの場合のみ",scale=1920:1080"が格納される。画像にはSARとか無いので)
 function ImageEncode {
     #連番jpg出力する例
@@ -91,7 +91,7 @@ function ImageEncode {
     #waifu2xをここで使用することは一応可能ですが、処理時間が非現実的です
 
     #tsを保持用ディレクトリにコピーする例
-    Copy-Item -LiteralPath "${env:FilePath}" "D:\tsfiles" -ErrorAction SilentlyContinue
+    Copy-Item -LiteralPath "${env:FilePath}" "F:\ts" -ErrorAction SilentlyContinue
 }
 
 #--------------------tsファイルサイズ判別--------------------
@@ -101,18 +101,19 @@ $tssize_toggle=$True
 #閾値
 $tssize_max=20GB #くらいがおすすめ
 #通常品質(LA-ICQ:27,x265:25)
-$quality_normal='-init_qpI 23 -init_qpP 27 -init_qpB 27'
+#$quality_normal='-init_qpI 20 -init_qpP 25 -init_qpB 26'
+$quality_normal='-init_qpI 22 -init_qpP 24 -init_qpB 25'
 #低品質(LA-ICQ:30,x265:27)
-$quality_low='-init_qpI 25 -init_qpP 30 -init_qpB 32'
+$quality_low='-init_qpI 22 -init_qpP 27 -init_qpB 28'
 
 #--------------------デュアルモノの判別--------------------
 #音声引数をデュアルモノか否かで変える($ArgAudio)
 #デュアルモノ
-$audio_dualmono='-c:a aac -b:a 128k -ac 1 -filter_complex channelsplit'
+$audio_dualmono='-c:a aac -b:a 128k -ac 1 -max_muxing_queue_size 400 -filter_complex channelsplit'
 #通常
-$audio_normal='-c:a copy' #エラーは出るが失敗しない
-#$audio_normal='-c:a aac -b:a 256k' 再エンコ
-#$audio_normal='-c:a copy -bsf:a aac_adtstoasc' 失敗する上ExitCode=0の為、非推奨
+$audio_normal='-c:a aac -b:a 256k -ac 2 -max_muxing_queue_size 4000' #失敗しない、ただし再エンコ
+#$audio_normal='-c:a copy' #失敗する上ExitCode=0
+#$audio_normal='-c:a copy -bsf:a aac_adtstoasc' 失敗する上ExitCode=0
 
 #--------------------PIDの判別--------------------
 #必要なPIDを取得し-map引数に加える($ArgPid)
@@ -149,7 +150,7 @@ x264 placebo by bel9r
 #>
 function VideoEncode {
     #hevc_nvenc constqp (qpI,P,Bはtsファイルサイズ判別を参照)
-    Invoke-Process -File "${ffpath}\ffmpeg.exe" -Arg "-y -v verbose -hide_banner -nostats -fflags +discardcorrupt -i `"${env:FilePath}`" $ArgAudio -vf bwdif=0:-1:1 -c:v hevc_nvenc -preset:v slow -profile:v main -rc:v constqp $ArgQual -refs 6 -bf 3 -pix_fmt yuv420p $ArgPid -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`"" -Priority 'BelowNormal' -Affinity '0xFFC'
+    Invoke-Process -File "${ffpath}\ffmpeg.exe" -Arg "-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" $ArgAudio -vf bwdif=0:-1:1 -c:v hevc_nvenc -preset:v slow -profile:v main -rc:v constqp -rc-lookahead 32 $ArgQual -g 300 -bf 3 -refs 6 -pix_fmt yuv420p $ArgPid -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`"" -Priority 'BelowNormal' -Affinity '0xFFF'
 }
 
 #--------------------Post--------------------
@@ -168,7 +169,7 @@ $env:ssl_cert_file='C:\DTV\EDCB\cacert.pem'
 #Discord機能 $False=無効、$True=有効
 $discord_toggle=$True
 #webhook url
-$hookUrl='https://discordapp.com/api/webhooks/XXXXXXXXXX'
+$hookUrl='https://discordapp.com/api/webhooks/510813878956064768/YU68YW3Z3lHqnZt0vrOMgEB8JufWsNtU318MqxRP-aXS9VJTqX6bzHRvQEgftuWvGYPi'
 
 #BalloonTip機能 $False=無効、$True=有効
 $balloontip_toggle=$True
@@ -193,7 +194,8 @@ $balloontip_toggle=$True
 #########################################################################################################################
 
 #====================Post関数====================
-function Post {
+function Post
+{
     param
     (
         [bool]$exc,
@@ -205,50 +207,55 @@ function Post {
     #例外。自動削除が有効の場合、ts、ts.program.txt、ts.err、mp4を退避
     if ($exc)
     {
-        if ($TsFolderRound) {
-            Copy-Item -LiteralPath "${env:FilePath}" "${err_folder_path}" -ErrorAction SilentlyContinue
-            Copy-Item -LiteralPath "${env:FilePath}.program.txt" "${err_folder_path}" -ErrorAction SilentlyContinue
-            Copy-Item -LiteralPath "${env:FilePath}.err" "${err_folder_path}" -ErrorAction SilentlyContinue
+        if ($TsFolderRound)
+        {
+            Move-Item -LiteralPath "${env:FilePath}" "${err_folder_path}" -ErrorAction SilentlyContinue
+            Move-Item -LiteralPath "${env:FilePath}.program.txt" "${err_folder_path}" -ErrorAction SilentlyContinue
+            Move-Item -LiteralPath "${env:FilePath}.err" "${err_folder_path}" -ErrorAction SilentlyContinue
         }
-        if ($Mp4FolderRound) {
-            Copy-Item -LiteralPath "${tmp_folder_path}\${env:FileName}.mp4" "${err_folder_path}" -ErrorAction SilentlyContinue
+        if ($Mp4FolderRound)
+        {
+            Move-Item -LiteralPath "${tmp_folder_path}\${env:FileName}.mp4" "${err_folder_path}" -ErrorAction SilentlyContinue
         }
     }
     #Error時だけでなく、Info時もPostできるようにするトグル
     if ($toggle)
     {
         #Twitter警告
-        if ($tweet_toggle) {
+        if ($tweet_toggle)
+        {
             $env:content = $content
             &"$ruby_path" "$tweet_rb_path"
             #Start-Process "${ruby_path}" "${tweet_rb_path}" -WindowStyle Hidden -Wait
         }
         #Discord警告
-        if ($discord_toggle) {
-            $payload=[PSCustomObject]@{
+        if ($discord_toggle)
+        {
+            $payload = [PSCustomObject]@{
                 content = $content
             }
-            $payload=($payload | ConvertTo-Json)
-            $payload=[System.Text.Encoding]::UTF8.GetBytes($payload)
+            $payload = ($payload | ConvertTo-Json)
+            $payload = [System.Text.Encoding]::UTF8.GetBytes($payload)
             Invoke-RestMethod -Uri $hookUrl -Method Post -Body $payload
         }
     }
     #BalloonTip
-    if ($balloontip_toggle) {
+    if ($balloontip_toggle)
+    {
         #特定のTipIconのみを使用可
         #[System.Windows.Forms.ToolTipIcon] | Get-Member -Static -Type Property
-        $balloon.BalloonTipIcon=[System.Windows.Forms.ToolTipIcon]::$tipicon
+        $balloon.BalloonTipIcon = [System.Windows.Forms.ToolTipIcon]::$tipicon
         #表示するタイトル
-        $balloon.BalloonTipTitle=$tiptitle
+        $balloon.BalloonTipTitle = $tiptitle
         #表示するメッセージ
-        $balloon.BalloonTipText=$content
+        $balloon.BalloonTipText = $content
         #balloontip_toggle=1なら5000ミリ秒バルーンチップ表示
         $balloon.ShowBalloonTip(5000)
         #5秒待って
         Start-Sleep -Seconds 5
     }
     #タスクトレイアイコン非表示(異常終了時は実行されずトレイに亡霊が残る仕様)
-    $balloon.Visible=$False
+    $balloon.Visible = $False
 }
 
 #視聴予約なら終了
@@ -451,7 +458,7 @@ Write-Output "ArgAudio:$ArgAudio"
 #====================PIDの判別====================
 #PID引数の設定
 #ffprobeでcodec_type,height,idをソート
-$programs = [xml](&"$ffpath\ffprobe.exe" -v quiet -i "${env:FilePath}" -show_entries stream=codec_type,height,id,channels -print_format xml 2>&1)
+$programs = [xml](&"$ffpath\ffprobe.exe" -v quiet -analyzeduration 30M -probesize 100M -i "${env:FilePath}" -show_entries stream=codec_type,height,id,channels -print_format xml 2>&1)
 $programs.ffprobe.streams.stream
 $programs.ffprobe.streams.stream | foreach {
     #解像度の大きいVideoストリームを選ぶ
@@ -509,7 +516,7 @@ if ($ExitCode -gt 0)
         {$_ -match 'Errorduringencoding:devicefailed'} {$err_detail+="`n[h264_qsv] device failed (-17)"}
         {$_ -match 'Couldnotfindcodecparameters'} {$err_detail+="`n[mpegts] PIDの判別に失敗"}
         {$_ -match 'Unsupportedchannellayout'} {$err_detail+="`n[aac] 非対応のチャンネルレイアウト"}
-        {$_ -match 'Toomanypacketsbuffered'} {$err_detail+="`n[-c:a aac] PIDの判別に失敗"}
+        {$_ -match 'Toomanypacketsbuffered'} {$err_detail+="`n[-c:a aac] max_muxing_queue_size"}
         {$_ -match 'Inputpackettoosmall'} {$err_detail+="`n[-c:a copy] PIDの判別に失敗"}
         {$_ -match 'Invalidargument'} {$err_detail+="`n[FFmpeg] 無効な引数"}
         default {$err_detail+="`n不明なエラー"}
