@@ -1,4 +1,4 @@
-#190101
+#191125
 #_EDCBX_HIDE_
 #ファイル名をタイトルバーに表示
 #(Get-Host).UI.RawUI.WindowTitle="$($MyInvocation.MyCommand.Name):${env:FileName}.ts"
@@ -69,7 +69,7 @@ $ts_folder_max=100GB
 #閾値を超過した場合、$False=容量警告、$True=mp4を自動削除
 $Mp4FolderRound=$True
 #mp4用フォルダの上限
-$mp4_folder_max=50GB
+$mp4_folder_max=100GB
 
 #--------------------jpg出力--------------------
 #$True=有効 $False=無効
@@ -77,7 +77,7 @@ $jpg_toggle=$True
 #連番jpgを出力するフォルダ用のディレクトリ
 $jpg_path='C:\Users\sbn\Desktop\TVTest'
 #jpg出力したい自動予約キーワード(常にjpg出力する場合: $jpg_addkey='')
-$jpg_addkey='インターミッション|やがて君になる|宇宙戦艦ヤマト|アリシゼーション|beatless|ハイスクール・フリート|灰と幻想のグリムガル|デート・ア・ライブ|ダンジョンに出会いを求める|荒野のコトブキ飛行隊|山田くんと7人の魔女|冴えない彼女の育てかた|キルラキル|サイコパス|PSYCHO|鬼滅の刃'
+$jpg_addkey='インターミッション|宇宙戦艦ヤマト|アリシゼーション|ダンジョンに出会いを求める|冴えない彼女の育てかた|キルラキル|サイコパス|PSYCHO|鬼滅の刃|エルメロイ|とある科学の一方通行|ダンジョンに出会いを求めるのは間違っているだろうか|彼方のアストラ|戦姫絶唱シンフォギア|プリンシパル|魔法少女まどか|打ち上げ花火|オーディナル|ソードアート|Angel Beats|革命機ヴァルヴレイヴ|パンツァー|新世紀エヴァンゲリオン|ジョジョの奇妙な冒険|涼宮ハルヒ|戦姫絶唱シンフォギア|デート・ア・ライブ|終わりのセラフ|灼眼のシャナ|アズールレーン|新世紀エヴァンゲリオン'
 #自動予約キーワードに引っ掛かった場合に実行するコード 使用可能:$ArgScale(横が1440pxの場合のみ",scale=1920:1080"が格納される。画像にはSARとか無いので)
 function ImageEncode {
     #連番jpg出力する例
@@ -91,7 +91,7 @@ function ImageEncode {
     #waifu2xをここで使用することは一応可能ですが、処理時間が非現実的です
 
     #tsを保持用ディレクトリにコピーする例
-    Copy-Item -LiteralPath "${env:FilePath}" "F:\ts" -ErrorAction SilentlyContinue
+    Copy-Item -LiteralPath "${env:FilePath}" "H:\ts" -ErrorAction SilentlyContinue
 }
 
 #--------------------tsファイルサイズ判別--------------------
@@ -101,10 +101,9 @@ $tssize_toggle=$True
 #閾値
 $tssize_max=20GB #くらいがおすすめ
 #通常品質(LA-ICQ:27,x265:25)
-#$quality_normal='-init_qpI 20 -init_qpP 25 -init_qpB 26'
 $quality_normal='-init_qpI 22 -init_qpP 24 -init_qpB 25'
 #低品質(LA-ICQ:30,x265:27)
-$quality_low='-init_qpI 22 -init_qpP 27 -init_qpB 28'
+$quality_low='-init_qpI 23 -init_qpP 28 -init_qpB 29'
 
 #--------------------デュアルモノの判別--------------------
 #音声引数をデュアルモノか否かで変える($ArgAudio)
@@ -150,7 +149,7 @@ x264 placebo by bel9r
 #>
 function VideoEncode {
     #hevc_nvenc constqp (qpI,P,Bはtsファイルサイズ判別を参照)
-    Invoke-Process -File "${ffpath}\ffmpeg.exe" -Arg "-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" $ArgAudio -vf bwdif=0:-1:1 -c:v hevc_nvenc -preset:v slow -profile:v main -rc:v constqp -rc-lookahead 32 $ArgQual -g 300 -bf 3 -refs 6 -pix_fmt yuv420p $ArgPid -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`"" -Priority 'BelowNormal' -Affinity '0xFFF'
+    Invoke-Process -File "${ffpath}\ffmpeg.exe" -Arg "-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" $ArgAudio -vf bwdif=0:-1:1 -c:v hevc_nvenc -preset:v slow -profile:v main -rc:v constqp -rc-lookahead 32 $ArgQual -g 60 -bf 3 -refs 6 -pix_fmt yuv420p $ArgPid -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`"" -Priority 'BelowNormal' -Affinity '0xFFF'
 }
 
 #--------------------Post--------------------
@@ -160,7 +159,7 @@ $InfoPostToggle=$False
 #Twitter機能 $False=無効、$True=有効
 $tweet_toggle=$True
 #ruby.exe
-$ruby_path='C:\Ruby25-x64\bin\ruby.exe'
+$ruby_path='wsl ruby'
 #tweet.rb
 $tweet_rb_path='C:\DTV\EDCB\tweet.rb'
 #SSL証明書(環境変数)
@@ -236,7 +235,7 @@ function Post
             }
             $payload = ($payload | ConvertTo-Json)
             $payload = [System.Text.Encoding]::UTF8.GetBytes($payload)
-            Invoke-RestMethod -Uri $hookUrl -Method Post -Body $payload
+            Invoke-RestMethod -Uri $hookUrl -Method Post -Headers @{ "Content-Type" = "application/json" } -Body $payload
         }
     }
     #BalloonTip
