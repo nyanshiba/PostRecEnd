@@ -456,27 +456,22 @@ if (Get-Content -LiteralPath "${env:FilePath}.program.txt" | Select-String -Simp
 Write-Output "ArgAudio:$ArgAudio"
 
 "#--------------------PIDの判別--------------------"
-#PID引数の設定
-#ffprobeでcodec_type,height,idをソート
-$programs = [xml](&"$ffpath\ffprobe.exe" -v quiet -analyzeduration 30M -probesize 100M -i "${env:FilePath}" -show_entries stream=codec_type,height,id,channels -print_format xml 2>&1)
-$programs.ffprobe.streams.stream
-$programs.ffprobe.streams.stream | foreach {
-    #解像度の大きいVideoストリームを選ぶ
-    #xmlの要素はStringなのでintにする必要あり
-    if (($_.codec_type -eq "video") -And ($_.height -ne "0") -And ([int]($_.height) -gt [int]($otherheight)))
-    {
-        $otherheight = $_.height
-        $ArgPid = "-map i:$($_.id)"
-    }
-}
-#VideoのPIDの先頭(0x1..)と一致するAudioストリームを引数に追加
-$programs.ffprobe.streams.stream | foreach {
-    if (($_.codec_type -eq "audio") -And ($_.channels -ne "0") -And ($($_.id).Substring(0,3) -eq $ArgPid.Substring(7,3)))
-    {
-        $ArgPid += " -map i:$($_.id)"
-    }
-}
-Write-Output "ArgPid:$ArgPid"
+# PID引数の設定
+
+# ffprobeでcodec_type,height,idをソート
+$stream = ([xml](&"$ffpath\ffprobe.exe" -v quiet -analyzeduration 30M -probesize 100M -i "${env:FilePath}" -show_entries stream=codec_type,height,id,channels -print_format xml 2>&1)).ffprobe.streams.stream
+$stream
+
+# 解像度の大きいVideoストリームを選ぶ
+[string[]]$ArgPid = ($stream | Where-Object {$_.codec_type -eq "video"} | Sort-Object -Property height | Select-Object -Index 0).id
+
+# VideoのPIDの先頭(0x1..)と一致するAudioストリームを選ぶ
+$ArgPid += ($stream | Where-Object {$_.codec_type -eq "audio" -And $_.channels -ne "0" -And $_.id -match ($ArgPid).Substring(0,3)}).id
+
+# FFmpeg引数のフォーマットに直す
+[string]$ArgPid = "-map i:" + ($ArgPid -join " -map i:")
+
+Write-Output "ArgPid: $ArgPid"
 
 "#--------------------エンコード--------------------"
 #カウントを0にリセット
