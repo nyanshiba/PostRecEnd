@@ -193,7 +193,7 @@ $balloontip_toggle=$True
 
 #########################################################################################################################
 
-#====================Post関数====================
+"#--------------------Post関数--------------------"
 function Post
 {
     param
@@ -266,7 +266,7 @@ if ("${env:FilePath}" -eq $null) {
     Post -Exc $True -Toggle $True -Content "Error:${env:Title}`n[EDCB] 録画失敗によりエンコード不可" -TipIcon 'Error' -TipTitle '録画失敗'
 }
 
-#====================Invoke-Process関数====================
+"#--------------------Invoke-Process関数--------------------"
 #ffmpeg、&ffmpeg、.\ffmpeg:ffmpegが引数を正しく認識しない(ファイル名くらいなら-f mpegtsで行けるけどもういいです)
 #Start-Process ffmpeg:-NoNewWindowはWrite-Host？-RedirectStandardOutput、Errorはファイルのみ、-PassThruはExitCodeは受け取れても.StandardOutput、Errorは受け取れない仕様
 function Invoke-Process {
@@ -327,7 +327,7 @@ function Invoke-Process {
     $p.Close()
 }
 
-#====================NotifyIcon====================
+"#--------------------NotifyIcon--------------------"
 #System.Windows.FormsクラスをPowerShellセッションに追加
 Add-Type -AssemblyName System.Windows.Forms
 #NotifyIconクラスをインスタンス化
@@ -355,7 +355,7 @@ if ($log_toggle)
     })
 }
 
-#====================ログ====================
+"#--------------------ログ--------------------"
 #ログのソート例: (sls -path "$log_path\*.txt" 'faild' -SimpleMatch).Path
 #log_toggle=$Trueならば実行
 if ($log_toggle) {
@@ -372,7 +372,7 @@ if ($log_toggle) {
 }
 
 
-#====================ts・mp4の自動削除====================
+"#--------------------ts・mp4の自動削除--------------------"
 #フォルダの合計サイズを設定値以下に丸め込む関数
 function FolderRound {
     param
@@ -419,7 +419,7 @@ FolderRound -Toggle $TsFolderRound -Ext "ts" -Path "$env:FolderPath" -Round $ts_
 #mp4
 FolderRound -Toggle $Mp4FolderRound -Ext "mkv" -Path "$mp4_folder_path" -Round $mp4_folder_max
 
-#====================jpg出力====================
+"#--------------------jpg出力--------------------"
 #jpg出力機能が有効(jpg_toggle=1)且つenv:Addkey(自動予約時のキーワード)にjpg_addkey(指定の文字)が含まれている場合は連番jpgも出力
 if (($jpg_toggle) -And ("$env:Addkey" -match "$jpg_addkey")) {
     Write-Output "jpg出力"
@@ -434,7 +434,7 @@ if (($jpg_toggle) -And ("$env:Addkey" -match "$jpg_addkey")) {
     ImageEncode
 }
 
-#====================tsファイルサイズ判別====================
+"#--------------------tsファイルサイズ判別--------------------"
 #tsファイルサイズを取得
 $ts_size=(Get-ChildItem -LiteralPath "${env:FilePath}").Length
 if ($tssize_toggle) {
@@ -446,7 +446,7 @@ if ($tssize_toggle) {
     Write-Output "ArgQual:$ArgQual"
 }
 
-#====================デュアルモノの判別====================
+"#--------------------デュアルモノの判別--------------------"
 #番組情報ファイルがありデュアルモノという文字列があればTrue、文字列がない場合はFalse、番組情報ファイルが無ければNull
 if (Get-Content -LiteralPath "${env:FilePath}.program.txt" | Select-String -SimpleMatch 'デュアルモノ' -quiet) {
     $ArgAudio=$audio_dualmono
@@ -455,7 +455,7 @@ if (Get-Content -LiteralPath "${env:FilePath}.program.txt" | Select-String -Simp
 }
 Write-Output "ArgAudio:$ArgAudio"
 
-#====================PIDの判別====================
+"#--------------------PIDの判別--------------------"
 #PID引数の設定
 #ffprobeでcodec_type,height,idをソート
 $programs = [xml](&"$ffpath\ffprobe.exe" -v quiet -analyzeduration 30M -probesize 100M -i "${env:FilePath}" -show_entries stream=codec_type,height,id,channels -print_format xml 2>&1)
@@ -478,7 +478,7 @@ $programs.ffprobe.streams.stream | foreach {
 }
 Write-Output "ArgPid:$ArgPid"
 
-#====================エンコード====================
+"#--------------------エンコード--------------------"
 #カウントを0にリセット
 $cnt=0
 #終了コードが1且つループカウントが50未満までの間、エンコードを試みる
@@ -504,7 +504,7 @@ Write-Output "ExitCode:$ExitCode"
 $PostFileSize="`nts:$([math]::round(${ts_size}/1GB,2))GB mp4:$([math]::round(${mp4_size}/1MB,0))MB"
 $PostFileSize
 
-#====================Backup and Sync====================
+"#--------------------Backup and Sync--------------------"
 #Invoke-Processから渡された$StdErrからスペースを消す
 $StdErr=($StdErr -replace " ","")
 #ffmpegの終了コード、mp4のファイルサイズによる条件分岐
