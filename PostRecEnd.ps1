@@ -277,7 +277,7 @@ function Invoke-Process {
         [string]$file,
         [string]$arg
     )
-    Write-Output "Invoke-Process:$file $arg"
+    "DEBUG Invoke-Process:$file $arg"
 
     #設定
     #ProcessStartInfoクラスをインスタンス化
@@ -350,24 +350,24 @@ if ($log_toggle)
     $balloon.add_Click({
         if ($_.Button -eq [System.Windows.Forms.MouseButtons]::Left)
         {
-            &"${log_path}\${env:FileName}.txt"
+            &"${log_path}\${env:FileName}.log"
         }
     })
 }
 
 "#--------------------ログ--------------------"
-#ログのソート例: (sls -path "$log_path\*.txt" 'faild' -SimpleMatch).Path
+#ログのソート例: (sls -path "$log_path\*.log" 'faild' -SimpleMatch).Path
 #log_toggle=$Trueならば実行
 if ($log_toggle) {
     #ログ取り開始
-    Start-Transcript -LiteralPath "${log_path}\${env:FileName}.txt"
+    Start-Transcript -LiteralPath "${log_path}\${env:FileName}.log"
     #録画用アプリの起動数を取得
     #$RecCount=(Get-Process -ErrorAction 0 "EpgDataCap_bon","TVTest").Count
-    #Write-Output "同時録画数:$RecCount"
+    #"DEBUG 同時録画数:$RecCount"
     #Get-ChildItemでログフォルダのtxtファイルを取得、更新日降順でソートし、logcnt_max個飛ばし、ForEach-ObjectでRemove-Itemループ
-    Get-ChildItem "${log_path}\*.txt" | Sort-Object LastWriteTime -Descending | Select-Object -Skip $logcnt_max | ForEach-Object {
+    Get-ChildItem "${log_path}\" -Include *.txt,*.log | Sort-Object LastWriteTime -Descending | Select-Object -Skip $logcnt_max | ForEach-Object {
         Remove-Item -LiteralPath "$_"
-        Write-Output "ログ削除:$_"
+        "DEBUG ログ削除:$_"
     }
 }
 
@@ -404,7 +404,7 @@ function FolderRound {
             }
             Write-Output $dellog
         }
-        Write-Output "${ext}フォルダ:$([math]::round(${maintsize}/1GB,2))GB"
+        "DEBUG ${ext}フォルダ:$([math]::round(${maintsize}/1GB,2))GB"
     } elseif (!($toggle))
     {
         #超過時の警告
@@ -422,7 +422,7 @@ FolderRound -Toggle $Mp4FolderRound -Ext "mkv" -Path "$mp4_folder_path" -Round $
 "#--------------------jpg出力--------------------"
 #jpg出力機能が有効(jpg_toggle=1)且つenv:Addkey(自動予約時のキーワード)にjpg_addkey(指定の文字)が含まれている場合は連番jpgも出力
 if (($jpg_toggle) -And ("$env:Addkey" -match "$jpg_addkey")) {
-    Write-Output "jpg出力"
+    "DEBUG jpg出力"
     #生TSの横が1920か1440か調べる
     $ts_width=[xml](&"${ffpath}\ffprobe.exe" -v quiet -i "${env:FilePath}" -show_entries stream=width -print_format xml 2>&1)
     $ts_width=$ts_width.ffprobe.streams.stream.width
@@ -443,7 +443,7 @@ if ($tssize_toggle) {
         {$_ -le $tssize_max} {$ArgQual="$quality_normal"}
         {$_ -gt $tssize_max} {$ArgQual="$quality_low"}
     }
-    Write-Output "ArgQual:$ArgQual"
+    "DEBUG ArgQual:$ArgQual"
 }
 
 "#--------------------デュアルモノの判別--------------------"
@@ -453,7 +453,7 @@ if (Get-Content -LiteralPath "${env:FilePath}.program.txt" | Select-String -Simp
 } else {
     $ArgAudio=$audio_normal
 }
-Write-Output "ArgAudio:$ArgAudio"
+"DEBUG ArgAudio:$ArgAudio"
 
 "#--------------------PIDの判別--------------------"
 # PID引数の設定
@@ -471,7 +471,7 @@ $ArgPid += ($stream | Where-Object {$_.codec_type -eq "audio" -And $_.channels -
 # FFmpeg引数のフォーマットに直す
 [string]$ArgPid = "-map i:" + ($ArgPid -join " -map i:")
 
-Write-Output "ArgPid: $ArgPid"
+"DEBUG ArgPid: $ArgPid"
 
 "#--------------------エンコード--------------------"
 #カウントを0にリセット
@@ -494,8 +494,8 @@ do {
     }
 } while (($ExitCode -eq 1) -And ($cnt -lt 50))
 #最終的なエンコード回数、終了コード、ファイルサイズ
-Write-Output "エンコード回数:$cnt"
-Write-Output "ExitCode:$ExitCode"
+"DEBUG エンコード回数:$cnt"
+"DEBUG ExitCode:$ExitCode"
 $PostFileSize="`nts:$([math]::round(${ts_size}/1GB,2))GB mp4:$([math]::round(${mp4_size}/1MB,0))MB"
 $PostFileSize
 
@@ -539,3 +539,6 @@ if ($ExitCode -gt 0)
     #Twitter、Discord、BalloonTip
     Post -Exc $False -Toggle $InfoPostToggle -Content "${env:FileName}.ts${err_detail}${PostFileSize}" -TipIcon "$TipIcon" -TipTitle 'エンコード終了'
 }
+
+#ログ取り停止
+Stop-Transcript
