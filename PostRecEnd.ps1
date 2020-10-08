@@ -1,4 +1,4 @@
-#191125
+#2020-10-08
 #_EDCBX_HIDE_
 #ファイル名をタイトルバーに表示
 #(Get-Host).UI.RawUI.WindowTitle="$($MyInvocation.MyCommand.Name):${env:FileName}.ts"
@@ -49,13 +49,13 @@ $Size=0.2TB
 #>
 
 #ffmpeg.exe、ffprobe.exeがあるディレクトリ
-$ffpath='C:\DTV\ffmpeg'
+$ffpath='C:\bin\ffmpeg'
 
 #--------------------ログ--------------------
 #$False=無効、$True=有効
 $log_toggle=$True
 #ログ出力ディレクトリ
-$log_path='C:\Rec\EncLog'
+$log_path='C:\logs\PostRecEnd'
 #ログを残す数
 $logcnt_max=500
 
@@ -63,13 +63,13 @@ $logcnt_max=500
 #閾値を超過した場合、$False=容量警告、$True=tsを自動削除
 $TsFolderRound=$True
 #録画フォルダの上限
-$ts_folder_max=100GB
+$ts_folder_max=150GB
 
 #--------------------mp4の自動削除--------------------
 #閾値を超過した場合、$False=容量警告、$True=mp4を自動削除
 $Mp4FolderRound=$True
 #mp4用フォルダの上限
-$mp4_folder_max=100GB
+$mp4_folder_max=50GB
 
 #--------------------jpg出力--------------------
 #$True=有効 $False=無効
@@ -77,7 +77,7 @@ $jpg_toggle=$True
 #連番jpgを出力するフォルダ用のディレクトリ
 $jpg_path='C:\Users\sbn\Desktop\TVTest'
 #jpg出力したい自動予約キーワード(常にjpg出力する場合: $jpg_addkey='')
-$jpg_addkey='インターミッション|宇宙戦艦ヤマト|アリシゼーション|ダンジョンに出会いを求める|冴えない彼女の育てかた|キルラキル|サイコパス|PSYCHO|鬼滅の刃|エルメロイ|とある科学の一方通行|ダンジョンに出会いを求めるのは間違っているだろうか|彼方のアストラ|戦姫絶唱シンフォギア|プリンシパル|魔法少女まどか|打ち上げ花火|オーディナル|ソードアート|Angel Beats|革命機ヴァルヴレイヴ|パンツァー|新世紀エヴァンゲリオン|ジョジョの奇妙な冒険|涼宮ハルヒ|戦姫絶唱シンフォギア|デート・ア・ライブ|終わりのセラフ|灼眼のシャナ|アズールレーン|新世紀エヴァンゲリオン'
+$jpg_addkey='宇宙戦艦ヤマト|アリシゼーション|ダンジョンに出会いを求める|冴えない彼女の育てかた|キルラキル|サイコパス|PSYCHO|鬼滅の刃|とある科学の一方通行|戦姫絶唱シンフォギア|プリンシパル|魔法少女まどか|打ち上げ花火|オーディナル|ソードアート|Angel Beats|革命機ヴァルヴレイヴ|パンツァー|新世紀エヴァンゲリオン|ジョジョの奇妙な冒険|涼宮ハルヒ|戦姫絶唱シンフォギア|デート・ア・ライブ|終わりのセラフ|灼眼のシャナ|アズールレーン|新世紀エヴァンゲリオン|翠星のガルガンティア|グリザイアの果実|シャーロット|ゼロから始める|魔法科高校の劣等生|マギアレコード|とある科学の超電磁砲|デンドログラム|恋する小惑星|へやキャン|フランキス|ガンダム|グリザイア|新サクラ大戦|エヴァーガーデン|銀河英雄伝説|政見放送|インターミッション|ハイビジョンウインドー|さわやかウインドー|シドニアの騎士|ゼロから始める異世界生活|Lapis Re:LiGHTs|魔女の旅々|エルメロイ|Charlotte|ゆるキャン|フリート|はいふり|庶民サンプル|ストライクウィッチーズ|戦翼のシグルドリーヴァ|ダンジョンに出会いを求めるのは間違っているだろうか|キミと僕の最後の戦場|アサルトリリィ|五等分の花嫁'
 #自動予約キーワードに引っ掛かった場合に実行するコード 使用可能:$ArgScale(横が1440pxの場合のみ",scale=1920:1080"が格納される。画像にはSARとか無いので)
 function ImageEncode {
     #連番jpg出力する例
@@ -91,7 +91,7 @@ function ImageEncode {
     #waifu2xをここで使用することは一応可能ですが、処理時間が非現実的です
 
     #tsを保持用ディレクトリにコピーする例
-    Copy-Item -LiteralPath "${env:FilePath}" "H:\ts" -ErrorAction SilentlyContinue
+    Copy-Item -LiteralPath "${env:FilePath}" "E:\ts" -ErrorAction SilentlyContinue
 }
 
 #--------------------tsファイルサイズ判別--------------------
@@ -101,16 +101,17 @@ $tssize_toggle=$True
 #閾値
 $tssize_max=20GB #くらいがおすすめ
 #通常品質(LA-ICQ:27,x265:25)
-$quality_normal='-init_qpI 22 -init_qpP 24 -init_qpB 25'
+$quality_normal='-init_qpI 21 -init_qpP 21 -init_qpB 23'
 #低品質(LA-ICQ:30,x265:27)
-$quality_low='-init_qpI 23 -init_qpP 28 -init_qpB 29'
+$quality_low='-init_qpI 23 -init_qpP 23 -init_qpB 26'
 
 #--------------------デュアルモノの判別--------------------
 #音声引数をデュアルモノか否かで変える($ArgAudio)
 #デュアルモノ
-$audio_dualmono='-c:a aac -b:a 128k -ac 1 -max_muxing_queue_size 400 -filter_complex channelsplit'
+$audio_dualmono='-strict -2 -c:a aac -b:a 128k -aac_coder twoloop -ac 1 -max_muxing_queue_size 4000 -filter_complex channelsplit'
 #通常
-$audio_normal='-c:a aac -b:a 256k -ac 2 -max_muxing_queue_size 4000' #失敗しない、ただし再エンコ
+$audio_normal='-strict -2 -c:a aac -b:a 256k -aac_coder twoloop -ac 2 -max_muxing_queue_size 4000' #失敗しない、ただし再エンコ
+#$audio_normal='-strict -2 -c:a flac -ac 2 -max_muxing_queue_size 4000'
 #$audio_normal='-c:a copy' #失敗する上ExitCode=0
 #$audio_normal='-c:a copy -bsf:a aac_adtstoasc' 失敗する上ExitCode=0
 
@@ -149,7 +150,7 @@ x264 placebo by bel9r
 #>
 function VideoEncode {
     #hevc_nvenc constqp (qpI,P,Bはtsファイルサイズ判別を参照)
-    Invoke-Process -File "${ffpath}\ffmpeg.exe" -Arg "-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" $ArgAudio -vf bwdif=0:-1:1 -c:v hevc_nvenc -preset:v slow -profile:v main -rc:v constqp -rc-lookahead 32 $ArgQual -g 60 -bf 3 -refs 6 -pix_fmt yuv420p $ArgPid -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`"" -Priority 'BelowNormal' -Affinity '0xFFF'
+    Invoke-Process -File "${ffpath}\ffmpeg.exe" -Arg "-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" $ArgAudio -vf pullup,dejudder,idet=intl_thres=1.38:prog_thres=1.5,yadif=mode=send_field:parity=auto:deint=interlaced,fps=fps=30000/1001:round=zero -c:v hevc_nvenc -preset:v p7 -profile:v main10 -rc:v constqp -rc-lookahead 1 -spatial-aq 0 -temporal-aq 1 -weighted_pred 0 $ArgQual -b_ref_mode 1 -dpb_size 4 -multipass 2 -g 60 -bf 3 -pix_fmt yuv420p10le $ArgPid -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`"" -Priority 'BelowNormal' -Affinity '0xFFF'
 }
 
 #--------------------Post--------------------
@@ -157,7 +158,7 @@ function VideoEncode {
 $InfoPostToggle=$False
 
 #Twitter機能 $False=無効、$True=有効
-$tweet_toggle=$True
+$tweet_toggle=$False
 #ruby.exe
 $ruby_path='wsl ruby'
 #tweet.rb
@@ -416,7 +417,7 @@ function FolderRound {
 #ts
 FolderRound -Toggle $TsFolderRound -Ext "ts" -Path "$env:FolderPath" -Round $ts_folder_max
 #mp4
-FolderRound -Toggle $Mp4FolderRound -Ext "mp4" -Path "$mp4_folder_path" -Round $mp4_folder_max
+FolderRound -Toggle $Mp4FolderRound -Ext "mkv" -Path "$mp4_folder_path" -Round $mp4_folder_max
 
 #====================jpg出力====================
 #jpg出力機能が有効(jpg_toggle=1)且つenv:Addkey(自動予約時のキーワード)にjpg_addkey(指定の文字)が含まれている場合は連番jpgも出力
@@ -531,7 +532,7 @@ if ($ExitCode -gt 0)
 } else
 {
     #mp4をmp4_folder_pathに投げる
-    Move-Item -LiteralPath "$tmp_folder_path\$env:FileName.mp4" "$mp4_folder_path"
+    Move-Item -LiteralPath "$tmp_folder_path\$env:FileName.mp4" -Destination "$mp4_folder_path\$env:FileName.mkv"
     #エラーメッセージが格納されていればTipIconをWarningに変える
     if ($err_detail)
     {
