@@ -389,7 +389,7 @@ function FolderRound
     # ディレクトリ内のファイルサイズの合計が$Roundより大きい場合実行し続ける
     for ($i = 0; ($sortTsFolder | Select-Object -Skip $i | Measure-Object -Sum Length).Sum -gt $Round; $i++)
     {
-        "WARN FolderRound: $Path is over $Round."
+        "WARN FolderRound: $Path is over $($Round/1GB)GB."
         if ($Mode -eq "Delete")
         {
             # 削除モードの場合
