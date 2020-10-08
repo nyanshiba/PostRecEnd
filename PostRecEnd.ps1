@@ -134,15 +134,6 @@ function VideoEncode {
 #$False=Error時のみ、$True=常時 Twitter、DiscordにPost
 $InfoPostToggle=$False
 
-#Twitter機能 $False=無効、$True=有効
-$tweet_toggle=$False
-#ruby.exe
-$ruby_path='wsl ruby'
-#tweet.rb
-$tweet_rb_path='C:\DTV\EDCB\tweet.rb'
-#SSL証明書(環境変数)
-$env:ssl_cert_file='C:\DTV\EDCB\cacert.pem'
-
 #Discord機能 $False=無効、$True=有効
 $discord_toggle=$True
 #webhook url
@@ -198,13 +189,6 @@ function Post
     #Error時だけでなく、Info時もPostできるようにするトグル
     if ($toggle)
     {
-        #Twitter警告
-        if ($tweet_toggle)
-        {
-            $env:content = $content
-            &"$ruby_path" "$tweet_rb_path"
-            #Start-Process "${ruby_path}" "${tweet_rb_path}" -WindowStyle Hidden -Wait
-        }
         #Discord警告
         if ($discord_toggle)
         {
