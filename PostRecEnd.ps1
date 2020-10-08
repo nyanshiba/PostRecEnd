@@ -71,29 +71,6 @@ $Mp4FolderRound="Delete"
 #mp4用フォルダの上限
 $mp4_folder_max=50GB
 
-#--------------------jpg出力--------------------
-#$True=有効 $False=無効
-$jpg_toggle=$True
-#連番jpgを出力するフォルダ用のディレクトリ
-$jpg_path='C:\Users\sbn\Desktop\TVTest'
-#jpg出力したい自動予約キーワード(常にjpg出力する場合: $jpg_addkey='')
-$jpg_addkey='宇宙戦艦ヤマト|アリシゼーション|ダンジョンに出会いを求める|冴えない彼女の育てかた|キルラキル|サイコパス|PSYCHO|鬼滅の刃|とある科学の一方通行|戦姫絶唱シンフォギア|プリンシパル|魔法少女まどか|打ち上げ花火|オーディナル|ソードアート|Angel Beats|革命機ヴァルヴレイヴ|パンツァー|新世紀エヴァンゲリオン|ジョジョの奇妙な冒険|涼宮ハルヒ|戦姫絶唱シンフォギア|デート・ア・ライブ|終わりのセラフ|灼眼のシャナ|アズールレーン|新世紀エヴァンゲリオン|翠星のガルガンティア|グリザイアの果実|シャーロット|ゼロから始める|魔法科高校の劣等生|マギアレコード|とある科学の超電磁砲|デンドログラム|恋する小惑星|へやキャン|フランキス|ガンダム|グリザイア|新サクラ大戦|エヴァーガーデン|銀河英雄伝説|政見放送|インターミッション|ハイビジョンウインドー|さわやかウインドー|シドニアの騎士|ゼロから始める異世界生活|Lapis Re:LiGHTs|魔女の旅々|エルメロイ|Charlotte|ゆるキャン|フリート|はいふり|庶民サンプル|ストライクウィッチーズ|戦翼のシグルドリーヴァ|ダンジョンに出会いを求めるのは間違っているだろうか|キミと僕の最後の戦場|アサルトリリィ|五等分の花嫁'
-#自動予約キーワードに引っ掛かった場合に実行するコード 使用可能:$ArgScale(横が1440pxの場合のみ",scale=1920:1080"が格納される。画像にはSARとか無いので)
-function ImageEncode {
-    #連番jpg出力する例
-    <#
-    #出力ディレクトリ
-    New-Item "${jpg_path}\${env:FileName}" -ItemType Directory
-    #プロセス実行
-    Invoke-Process -File "${ffpath}\ffmpeg.exe" -Arg "-y -nostats -an -skip_frame nokey -i `"${env:FilePath}`" -vf bwdif=0:-1:1,pp=ac,hqdn3d=2.0${ArgScale} -f image2 -q:v 0 -vsync 0 `"$jpg_path\$env:FileName\%05d.jpg`""
-    #>
-
-    #waifu2xをここで使用することは一応可能ですが、処理時間が非現実的です
-
-    #tsを保持用ディレクトリにコピーする例
-    Copy-Item -LiteralPath "${env:FilePath}" "E:\ts" -ErrorAction SilentlyContinue
-}
-
 #--------------------tsファイルサイズ判別--------------------
 #映像の品質引数をtsファイルサイズによって適応的に変える($ArgQual)
 #適応品質機能 $False=無効(エンコード引数内に記述)、$True=通常・低品質を閾値で切り替え
@@ -425,21 +402,6 @@ function FolderRound
 FolderRound -Mode $TsFolderRound -Ext "ts" -Path "$env:FolderPath" -Round $ts_folder_max
 #mp4
 FolderRound -Mode $Mp4FolderRound -Ext "mkv" -Path "$mp4_folder_path" -Round $mp4_folder_max
-
-"#--------------------jpg出力--------------------"
-#jpg出力機能が有効(jpg_toggle=1)且つenv:Addkey(自動予約時のキーワード)にjpg_addkey(指定の文字)が含まれている場合は連番jpgも出力
-if (($jpg_toggle) -And ("$env:Addkey" -match "$jpg_addkey")) {
-    "DEBUG jpg出力"
-    #生TSの横が1920か1440か調べる
-    $ts_width=[xml](&"${ffpath}\ffprobe.exe" -v quiet -i "${env:FilePath}" -show_entries stream=width -print_format xml 2>&1)
-    $ts_width=$ts_width.ffprobe.streams.stream.width
-    #SAR比(1440x1080しか想定してないけど)によるフィルタ設定、jpg出力
-    if ("$ts_width" -eq "1440") {
-        $ArgScale=',scale=1920:1080'
-    }
-    #jpg用ffmpeg引数を遅延展開
-    ImageEncode
-}
 
 "#--------------------tsファイルサイズ判別--------------------"
 #tsファイルサイズを取得
