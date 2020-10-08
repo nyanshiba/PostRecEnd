@@ -60,14 +60,14 @@ $log_path='C:\logs\PostRecEnd'
 $logcnt_max=500
 
 #--------------------tsの自動削除--------------------
-#閾値を超過した場合、$False=容量警告、$True=tsを自動削除
-$TsFolderRound=$True
+#閾値を超過した場合、Warning=容量警告、Delete=tsを自動削除
+$TsFolderRound="Delete"
 #録画フォルダの上限
 $ts_folder_max=150GB
 
 #--------------------mp4の自動削除--------------------
-#閾値を超過した場合、$False=容量警告、$True=mp4を自動削除
-$Mp4FolderRound=$True
+#閾値を超過した場合、Warning=容量警告、Delete=tsを自動削除
+$Mp4FolderRound="Delete"
 #mp4用フォルダの上限
 $mp4_folder_max=50GB
 
@@ -374,50 +374,57 @@ if ($log_toggle) {
 
 "#--------------------ts・mp4の自動削除--------------------"
 #フォルダの合計サイズを設定値以下に丸め込む関数
-function FolderRound {
+function FolderRound
+{
     param
     (
-        [bool]$toggle,
-        [string]$ext,
-        [string]$path,
-        [string]$round
+        [string]$Mode = "Warning",
+        [string]$Ext = "ts",
+        [string]$Path = "$env:FolderPath",
+        [string]$Round = 10GB
     )
-    if ($toggle)
+    # ディレクトリ内のファイルを日付順ソートで取得
+    $sortTsFolder = Get-ChildItem "$Path\*.$Ext" | Sort-Object LastWriteTime
+
+    # ディレクトリ内のファイルサイズの合計が$Roundより大きい場合実行し続ける
+    for ($i = 0; ($sortTsFolder | Select-Object -Skip $i | Measure-Object -Sum Length).Sum -gt $Round; $i++)
     {
-        #初期値
-        $delcnt=-1
-        #必ず1回は実行、フォルダ内の新しいファイルをSkipする数$iを増やしていって$maintsizeを$round以下に丸め込むループ
-        do {
-            $delcnt++
-            $maintsize=(Get-ChildItem "$path\*.$ext" | Sort-Object LastWriteTime -Descending | Select-Object -Skip $delcnt | Measure-Object -Sum Length).Sum
-        } while ($maintsize -gt $round)
-        #先程Skipしたファイルを実際に削除
-        Get-ChildItem "$path\*.$ext" | Sort-Object LastWriteTime | Select-Object -First $delcnt | ForEach-Object {
-            #tsかmp4を削除
-            Remove-Item -LiteralPath "$path\$($_.BaseName).$ext" -ErrorAction SilentlyContinue
-            $dellog="削除:$($_.BaseName).$ext"
-            #tsを削除中の場合、同名のts.program.txt、ts.errも削除
-            if ("$ext" -eq "ts") {
-                Remove-Item -LiteralPath "$path\$($_.BaseName).$ext.program.txt" -ErrorAction SilentlyContinue
-                Remove-Item -LiteralPath "$path\$($_.BaseName).$ext.err" -ErrorAction SilentlyContinue
-                $dellog+="、.program.txt、.err"
+        "WARN FolderRound: $Path is over $Round."
+        if ($Mode -eq "Delete")
+        {
+            # 削除モードの場合
+            # 削除対象のファイル名
+            $removeItem = ($sortTsFolder | Select-Object -Skip $i | Select-Object -Index 0).FullName
+            "DEBUG Remove-Item: $removeItem"
+
+            # $Extを削除
+            Remove-Item -LiteralPath $removeItem
+
+            # $Ext=.tsなら.ts.program.txt, .ts.errを削除
+            if ($Ext -eq "ts")
+            {
+                ($removeItem + ".program.txt"),($removeItem + ".err") | ForEach-Object {
+                    # 存在しなくともエラーは吐かなくてよい
+                    Remove-Item -LiteralPath $_ -ErrorAction SilentlyContinue
+                }
             }
-            Write-Output $dellog
-        }
-        "DEBUG ${ext}フォルダ:$([math]::round(${maintsize}/1GB,2))GB"
-    } elseif (!($toggle))
-    {
-        #超過時の警告
-        if ($((Get-ChildItem "$path" | Measure-Object -Sum Length).Sum) -gt $round) {
-            $err_detail="`n[FolderRound] ${ext}ディレクトリが${round}を超過"
+        } elseif ($Mode -eq "Warning")
+        {
+            # 警告モードの場合
+            # エラーログに追記
+            $err_detail="`n[FolderRound] ${Ext}ディレクトリが${Round}を超過"
+
+            # forループから抜けてfunction内に戻る
+            break
         }
     }
-
 }
+
+#Roundを超過した場合、$False:容量警告($Settings.Post) $True:拡張子がExtのファイルを古いものから削除
 #ts
-FolderRound -Toggle $TsFolderRound -Ext "ts" -Path "$env:FolderPath" -Round $ts_folder_max
+FolderRound -Mode $TsFolderRound -Ext "ts" -Path "$env:FolderPath" -Round $ts_folder_max
 #mp4
-FolderRound -Toggle $Mp4FolderRound -Ext "mkv" -Path "$mp4_folder_path" -Round $mp4_folder_max
+FolderRound -Mode $Mp4FolderRound -Ext "mkv" -Path "$mp4_folder_path" -Round $mp4_folder_max
 
 "#--------------------jpg出力--------------------"
 #jpg出力機能が有効(jpg_toggle=1)且つenv:Addkey(自動予約時のキーワード)にjpg_addkey(指定の文字)が含まれている場合は連番jpgも出力
