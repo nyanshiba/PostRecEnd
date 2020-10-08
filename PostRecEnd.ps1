@@ -510,7 +510,7 @@ $PostFileSize
 #Invoke-Processから渡された$StdErrからスペースを消す
 $StdErr=($StdErr -replace " ","")
 #ffmpegの終了コード、mp4のファイルサイズによる条件分岐
-if ($ExitCode -gt 0)
+if ($ExitCode -ne 0)
 {
     #$StdErrをソートしPost内容を決める
     switch ($StdErr)
