@@ -412,11 +412,11 @@ if (Get-Content -LiteralPath "${env:FilePath}.program.txt" | Select-String -Simp
 # PID引数の設定
 
 # ffprobeでcodec_type,height,idをソート
-$stream = ([xml](&"$ffpath\ffprobe.exe" -v quiet -analyzeduration 30M -probesize 100M -i "${env:FilePath}" -show_entries stream=codec_type,height,id,channels -print_format xml 2>&1)).ffprobe.streams.stream
-$stream
+$stream = (&"$ffpath\ffprobe.exe" -v quiet -analyzeduration 30M -probesize 100M -i "${env:FilePath}" -show_entries stream=codec_type,height,id,channels -print_format json 2>&1 | ConvertFrom-Json).programs.streams
+$stream | Format-Table -Property codec_type,height,id,channels
 
 # 解像度の大きいVideoストリームを選ぶ
-[string[]]$ArgPid = ($stream | Where-Object {$_.codec_type -eq "video"} | Sort-Object -Property height | Select-Object -Index 0).id
+[string[]]$ArgPid = ($stream | Where-Object {$_.codec_type -eq "video"} | Sort-Object -Property height -Descending | Select-Object -Index 0).id
 
 # VideoのPIDの先頭(0x1..)と一致するAudioストリームを選ぶ
 $ArgPid += ($stream | Where-Object {$_.codec_type -eq "audio" -And $_.channels -ne "0" -And $_.id -match ($ArgPid).Substring(0,3)}).id
