@@ -125,10 +125,11 @@ x265 fast bel9r inspire
 x264 placebo by bel9r
 -Arg "-y -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" ${ArgAudio} -vf bwdif=0:-1:1,pp=ac -c:v libx264 -preset:v placebo -x264-params crf=${ArgQual}:rc-lookahead=60:qpmin=5:qpmax=40:qpstep=16:qcomp=0.85:mbtree=0:vbv-bufsize=31250:vbv-maxrate=25000:aq-strength=0.35:psy-rd=0.35:keyint=300:bframes=6:partitions=p8x8,b8x8,i8x8,i4x4:merange=64:ref=4:no-dct-decimate=1 -pix_fmt yuv420p -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${ArgPid} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
 #>
-function VideoEncode {
+$VideoEncode =
+({
     #hevc_nvenc constqp (qpI,P,Bはtsファイルサイズ判別を参照)
     Invoke-Process -File "${ffpath}\ffmpeg.exe" -Arg "-y -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" $ArgAudio -vf pullup,dejudder,idet=intl_thres=1.38:prog_thres=1.5,yadif=mode=send_field:parity=auto:deint=interlaced,fps=fps=30000/1001:round=zero -c:v hevc_nvenc -preset:v p7 -profile:v main10 -rc:v constqp -rc-lookahead 1 -spatial-aq 0 -temporal-aq 1 -weighted_pred 0 $ArgQual -b_ref_mode 1 -dpb_size 4 -multipass 2 -g 60 -bf 3 -pix_fmt yuv420p10le $ArgPid -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`"" -Priority 'BelowNormal' -Affinity '0xFFF'
-}
+})
 
 #--------------------Post--------------------
 #$False=Error時のみ、$True=常時 Twitter、DiscordにPost
@@ -427,28 +428,29 @@ $ArgPid += ($stream | Where-Object {$_.codec_type -eq "audio" -And $_.channels -
 "DEBUG ArgPid: $ArgPid"
 
 "#--------------------エンコード--------------------"
-#カウントを0にリセット
-$cnt=0
 #終了コードが1且つループカウントが50未満までの間、エンコードを試みる
-do {
-    $cnt++
+for ($i = 0; $i -lt 50 -And $ExitCode -ne 0; $i++)
+{
     #再試行時からクールタイムを追加
-    if ($cnt -ge 2) {
+    if ($i -gt 0)
+    {
         Start-Sleep -s 60
     }
+    
     #エンコ mp4用ffmpeg引数を遅延展開
-    VideoEncode
+    Invoke-Command -Command $VideoEncode
+    "DEBUG ExitCode:$ExitCode"
+
     #エンコ1回目と成功時(ExitCode:0)のログだけで十分
-    if (($cnt -le 1) -Or ($ExitCode -eq 0)) {
+    if ($i -eq 0 -Or $ExitCode -eq 0)
+    {
         #プロセスの標準エラー出力をシェルの標準出力に出力
-        Write-Output $StdErr
-        #エンコ後のmp4のファイルサイズ
-        $mp4_size=$(Get-ChildItem -LiteralPath "${tmp_folder_path}\${env:FileName}.mp4").Length
+        $StdErr
     }
-} while (($ExitCode -eq 1) -And ($cnt -lt 50))
-#最終的なエンコード回数、終了コード、ファイルサイズ
-"DEBUG エンコード回数:$cnt"
-"DEBUG ExitCode:$ExitCode"
+}
+
+#エンコ後のmp4のファイルサイズ
+$mp4_size = $(Get-ChildItem -LiteralPath "${tmp_folder_path}\${env:FileName}.mp4").Length
 $PostFileSize="`nts:$([math]::round(${ts_size}/1GB,2))GB mp4:$([math]::round(${mp4_size}/1MB,0))MB"
 $PostFileSize
 
