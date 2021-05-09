@@ -1,11 +1,11 @@
 #_EDCBX_HIDE_
 
+
+
 #ffmpeg.exe、ffprobe.exeがあるディレクトリ
 $ffpath='C:\bin\ffmpeg'
 
 #--------------------ログ--------------------
-#$False=無効、$True=有効
-$log_toggle=$True
 #ログ出力ディレクトリ
 $log_path='C:\logs\PostRecEnd'
 #ログを残す数
@@ -95,9 +95,8 @@ $hookUrl='https://discordapp.com/api/webhooks/XXXXXXXXXX'
 #BalloonTip機能 $False=無効、$True=有効
 $balloontip_toggle=$True
 
-#########################################################################################################################
 
-"#--------------------Post関数--------------------"
+#--------------------関数--------------------
 function Post
 {
     param
@@ -163,7 +162,6 @@ if ("${env:FilePath}" -eq $null) {
     Post -Exc $True -Toggle $True -Content "Error:${env:Title}`n[EDCB] 録画失敗によりエンコード不可" -TipIcon 'Error' -TipTitle '録画失敗'
 }
 
-"#--------------------Invoke-Process関数--------------------"
 #ffmpeg、&ffmpeg、.\ffmpeg:ffmpegが引数を正しく認識しない(ファイル名くらいなら-f mpegtsで行けるけどもういいです)
 #Start-Process ffmpeg:-NoNewWindowはWrite-Host？-RedirectStandardOutput、Errorはファイルのみ、-PassThruはExitCodeは受け取れても.StandardOutput、Errorは受け取れない仕様
 function Invoke-Process {
@@ -224,7 +222,6 @@ function Invoke-Process {
     $p.Close()
 }
 
-"#--------------------NotifyIcon--------------------"
 #System.Windows.FormsクラスをPowerShellセッションに追加
 Add-Type -AssemblyName System.Windows.Forms
 #NotifyIconクラスをインスタンス化
@@ -241,33 +238,31 @@ $balloon.Text=([string]($MyInvocation.MyCommand.Name) + ":${env:FileName}.ts").S
 #タスクトレイアイコン表示
 $balloon.Visible=$True
 
-#ログ有効時、NotifyIconクリックでログを既定のテキストエディタで開く
-if ($log_toggle)
-{
-    $balloon.add_Click({
-        if ($_.Button -eq [System.Windows.Forms.MouseButtons]::Left)
-        {
-            &"${log_path}\${env:FileName}.log"
-        }
-    })
-}
+#NotifyIconクリックでログを既定のテキストエディタで開く
+$balloon.add_Click({
+    if ($_.Button -eq [System.Windows.Forms.MouseButtons]::Left)
+    {
+        &"${log_path}\${env:FileName}.log"
+    }
+})
 
 "#--------------------ログ--------------------"
-#ログのソート例: (sls -path "$log_path\*.log" 'faild' -SimpleMatch).Path
-#log_toggle=$Trueならば実行
-if ($log_toggle) {
-    #ログ取り開始
-    Start-Transcript -LiteralPath "${log_path}\${env:FileName}.log"
-    #録画用アプリの起動数を取得
-    #$RecCount=(Get-Process -ErrorAction 0 "EpgDataCap_bon","TVTest").Count
-    #"DEBUG 同時録画数:$RecCount"
-    #Get-ChildItemでログフォルダのtxtファイルを取得、更新日降順でソートし、logcnt_max個飛ばし、ForEach-ObjectでRemove-Itemループ
-    Get-ChildItem "${log_path}\" -Include *.txt,*.log | Sort-Object LastWriteTime -Descending | Select-Object -Skip $logcnt_max | ForEach-Object {
-        Remove-Item -LiteralPath "$_"
-        "DEBUG ログ削除:$_"
-    }
+#古いログの削除
+Get-ChildItem -LiteralPath "${log_path}\" -Include *.txt,*.log | Sort-Object LastWriteTime -Descending | Select-Object -Skip $logcnt_max | ForEach-Object {
+    Remove-Item -LiteralPath "$_"
+    "INFO Remove-Item: $_"
 }
 
+"#--------------------ユーザ設定--------------------"
+#ユーザ設定をログに記述
+foreach ($line in (Get-Content -LiteralPath $PSCommandPath) -split "`n")
+{
+    if ($line -match '#--------------------関数--------------------')
+    {
+        break
+    }
+    $line
+}
 
 "#--------------------ts・mp4の自動削除--------------------"
 #フォルダの合計サイズを設定値以下に丸め込む関数
