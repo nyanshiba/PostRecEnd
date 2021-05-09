@@ -1,52 +1,4 @@
-#2020-10-08
 #_EDCBX_HIDE_
-#ファイル名をタイトルバーに表示
-#(Get-Host).UI.RawUI.WindowTitle="$($MyInvocation.MyCommand.Name):${env:FileName}.ts"
-
-#####################ユーザ設定####################################################################################################
-
-<#
-設定の書き方ルール(PowerShellの仕様)
-
-X だめ
-$Toggle= イコール残したままにしない！テストでXにされるよ！
-O おk
-$Toggle=$False 無効
-$Toggle=$false 大文字小文字の区別はない
-$Toggle=0 無効
-$Toggle=$True 有効
-$Toggle=1 有効
-$Toggle = $true =や+=の前後にスペースがあっても良い(コーディング的にはこっちが推奨っぽい)
-$Toggle 空欄
-$Toggle=$Null null
-#$Toggle コメント
-
-X だめ
-$Path=C:\DTV\EncLog エラー出る
-$Path="C:\DTV\エンコード　ログ" 処理できるかもしれないけど基本的にパスに半角や全角のスペースは非推奨
-O おk
-$Path='C:\DTV\EncLog' 変数が無ければリテラルでおk
-$Path = "C:\DTV\EncLog" もちのろん
-
-X だめ
-$Arg='-quality $ArgQual' シングルクォートでは'$ArgQual'という文字列になってしまうので変数の中身が展開されないよ！
-$Arg="-vf bwdif=0:-1:1$ArgScale" 変数名とコードが紛らわしいよ！
-$Arg="-i "${FilePath}"" ダブルクオートの範囲が滅茶滅茶だよ><
-$Arg='-i "${FilePath}"' 変数が展開されないよ！
-O おk
-$Arg="-quality $ArgQual" ダブルクォートでは変数の中身が展開される
-$Arg="-vf bwdif=0:-1:1${ArgScale}" ${}を使おう
-$Arg="-i `"${FilePath}`"" バッククオート`でエスケープしよう
-
-X だめ
-$logcnt_max="1000" こういうのはString(文字列)じゃないよ！int(数値)だよ！
-O おk
-$logcnt_max=1000
-$logcnt_max=[int]"1000"
-$Size=200GB
-$Size="200GB" OKらしい(^^;;
-$Size=0.2TB
-#>
 
 #ffmpeg.exe、ffprobe.exeがあるディレクトリ
 $ffpath='C:\bin\ffmpeg'
@@ -142,23 +94,6 @@ $hookUrl='https://discordapp.com/api/webhooks/XXXXXXXXXX'
 
 #BalloonTip機能 $False=無効、$True=有効
 $balloontip_toggle=$True
-
-<#
-エラーメッセージ一覧
-
-・[EDCB] 録画失敗によりエンコード不可: tsファイルが無い(パスが渡されない)場合。録画失敗？
-・[EDCB] PIDの判別不可: ストリームの解析が失敗以前に不可能。Drop過多orスクランブル解除失敗？
-・[GoogleDrive] 10GB以上の為アップロードできません: GoogleDriveの仕様に合わせる。
-・[h264_qsv] device failed (-17): QSVのエラー。ループして復帰を試みるも失敗した場合。
-・[mpegts] コーデックパラメータが見つかりません: PID判別から渡されたPIDが適切でないorffmpegが非対応のストリーム。
-・[aac] 非対応のチャンネルレイアウト: ffmpeg4.0～デュアルモノを少なくとも従来の引数では扱えなくなった。
-・[-c:a aac] PIDの判別に失敗: -c:a aac時。指定サービスのみ(全サービスでない)録画になっていなければ必ず発生。また一通りのストリームに対応させた筈だけど起こるかもしれない。
-・[-c:a copy] PIDの判別に失敗: -c:a copy時。上に同じ。
-・[-c:a aac] PIDの判別に失敗？ ExitCode:0: -c:a aac時。ffmpegの終了コードは0だが異常がある？場合。
-・[-c:a copy] -c:a aacか-ss 1で治るやつ ExitCode:0: -c:a copy時。上に同じ。
-・[FFmpeg] 無効な引数
-・不明なエラー
-#>
 
 #########################################################################################################################
 
