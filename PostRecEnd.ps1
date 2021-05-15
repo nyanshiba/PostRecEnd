@@ -224,6 +224,35 @@ function Invoke-Process {
     $p.Close()
 }
 
+# DiscordやSlackにWebhookする
+function Send-Webhook
+{
+    [CmdletBinding()]
+    param (
+        [Parameter()]
+        [string]
+        $Text = 'ERROR Send-Webhook: Use -Text <String> or -Payload <Object>',
+        [System.Object]
+        $Payload,
+        [string]
+        $WebhookUrl = $Settings.Post.WebhookUrl
+    )
+
+    if ([string]::IsNullOrEmpty($WebhookUrl))
+    {
+        return "ERROR Send-Webhook: Webhook URL is empty"
+    }
+
+    # $Payload が指定されていなければ $Text を使う
+    if (!$Payload)
+    {
+        $Payload = [PSCustomObject]@{
+            content = $Text
+        }
+    }
+    Invoke-RestMethod -Uri $WebhookUrl -Method Post -Headers @{ "Content-Type" = "application/json" } -Body ([System.Text.Encoding]::UTF8.GetBytes(($Payload | ConvertTo-Json -Depth 5)))
+}
+
 #System.Windows.FormsクラスをPowerShellセッションに追加
 Add-Type -AssemblyName System.Windows.Forms
 #NotifyIconクラスをインスタンス化
