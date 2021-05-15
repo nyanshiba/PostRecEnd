@@ -1,4 +1,6 @@
 #_EDCBX_HIDE_
+#Requires -Version 5
+#Requires -PSEdition Desktop
 
 
 
