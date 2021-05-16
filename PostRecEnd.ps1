@@ -170,64 +170,108 @@ if ("${env:FilePath}" -eq $null) {
     Post -Exc $True -Toggle $True -Content "Error:${env:Title}`n[EDCB] 録画失敗によりエンコード不可" -TipIcon 'Error' -TipTitle '録画失敗'
 }
 
-#ffmpeg、&ffmpeg、.\ffmpeg:ffmpegが引数を正しく認識しない(ファイル名くらいなら-f mpegtsで行けるけどもういいです)
-#Start-Process ffmpeg:-NoNewWindowはWrite-Host？-RedirectStandardOutput、Errorはファイルのみ、-PassThruはExitCodeは受け取れても.StandardOutput、Errorは受け取れない仕様
-function Invoke-Process {
-    param
-    (
-        [string]$priority,
-        [int]$affinity,
-        [string]$file,
-        [string]$arg
+# ffmpeg, &ffmpeg, .\ffmpegでは複雑な引数に対応できない
+# Start-ProcessのStandardOutput, Errorはファイル出力のみ
+function Invoke-Process
+{
+    [CmdletBinding()]
+    param (
+        [Parameter()]
+        [String]
+        $Priority = 'Normal',
+        [Int32]
+        $Affinity =  [Convert]::ToInt32(('1' * $env:NUMBER_OF_PROCESSORS), 2), 
+        [String]
+        $FileName = 'powershell.exe',
+        [String]
+        $Arguments = 'ls',
+        [String[]]
+        $ArgumentList
     )
-    "DEBUG Invoke-Process:$file $arg"
+    Write-Host "DEBUG Invoke-Process`nFile: $FileName`nArguments: $Arguments`nArgumentList: $ArgumentList`n"
 
-    #設定
-    #ProcessStartInfoクラスをインスタンス化
-    $psi=New-Object System.Diagnostics.ProcessStartInfo
-    #アプリケーションファイル名
-    $psi.FileName = $file
-    #引数
-    $psi.Arguments = $arg
-    #標準エラー出力だけを同期出力(注意:$trueは1つだけにしないとデッドロックします)
-    $psi.UseShellExecute = $false
-    $psi.RedirectStandardInput = $false
-    $psi.RedirectStandardOutput = $false
-    $psi.RedirectStandardError = $true
-    $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
+    #cf. https://github.com/guitarrapc/PowerShellUtil/blob/master/Invoke-Process/Invoke-Process.ps1 
 
-    #実行
-    #Processクラスをインスタンス化
-    $p=New-Object System.Diagnostics.Process
-    #設定を読み込む
-    $p.StartInfo = $psi
-    #プロセス開始
-    $p.Start() > $Null
-    #プロセッサ親和性
-    if ($affinity)
+    # new Process
+    $ps = New-Object System.Diagnostics.Process
+    $ps.StartInfo.UseShellExecute = $False
+    $ps.StartInfo.RedirectStandardInput = $False
+    $ps.StartInfo.RedirectStandardOutput = $True
+    $ps.StartInfo.RedirectStandardError = $True
+    $ps.StartInfo.CreateNoWindow = $True
+    $ps.StartInfo.Filename = $FileName
+    if ($Arguments)
     {
-        #(Get-Process -Id $p.Id).ProcessorAffinity=[int]"$Affinity"
-        $p.ProcessorAffinity = [int]"$affinity"
+        # Windows
+        $ps.StartInfo.Arguments = $Arguments
     }
-    #プロセス優先度
-    if ($priority)
+    elseif ($ArgumentList)
     {
-        $p.PriorityClass = $priority
+        # Linux
+        $ArgumentList | ForEach-Object {
+            $ps.StartInfo.ArgumentList.Add("$_")
+        }
     }
-    #標準エラー出力をプロセス終了まで読む
-    $script:StdErr = $Null
-    while (!$p.HasExited)
+
+    # Event Handler for Output
+    $stdSb = New-Object -TypeName System.Text.StringBuilder
+    $errorSb = New-Object -TypeName System.Text.StringBuilder
+    $scripBlock = 
     {
-        $script:StdErr += "$($p.StandardError.ReadLine())`n"
+        $x = $Event.SourceEventArgs.Data
+        if (-not [String]::IsNullOrEmpty($x))
+        {
+            [System.Console]::WriteLine($x)
+            $Event.MessageData.AppendLine($x)
+        }
     }
-    #プロセスの標準エラー出力を変数に格納(注意:WaitForExitの前に書かないとデッドロックします)
-    #$script:StdErr=$p.StandardError.ReadToEnd()
-    #プロセス終了まで待機
-    #$p.WaitForExit()
-    #終了コードを変数に格納
-    $script:ExitCode = $p.ExitCode
-    #リソースを開放
-    $p.Close()
+    $stdEvent = Register-ObjectEvent -InputObject $ps -EventName OutputDataReceived -Action $scripBlock -MessageData $stdSb
+    $errorEvent = Register-ObjectEvent -InputObject $ps -EventName ErrorDataReceived -Action $scripBlock -MessageData $errorSb
+
+    # execution
+    $ps.Start() > $Null
+    $ps.PriorityClass = $Priority
+    $ps.ProcessorAffinity = $Affinity
+    $ps.BeginOutputReadLine()
+    $ps.BeginErrorReadLine()
+
+    # wait for complete
+    $ps.WaitForExit()
+    $ps.CancelOutputRead()
+    $ps.CancelErrorRead()
+
+    # verbose Event Result
+    $stdEvent, $errorEvent | Out-String -Stream | Write-Verbose
+
+    # Unregister Event to recieve Asynchronous Event output (You should call before process.Dispose())
+    Unregister-Event -SourceIdentifier $stdEvent.Name
+    Unregister-Event -SourceIdentifier $errorEvent.Name
+
+    # verbose Event Result
+    $stdEvent, $errorEvent | Out-String -Stream | Write-Verbose
+
+    # Get Process result
+    return [PSCustomObject]@{
+        StartTime = $ps.StartTime
+        StandardOutput = $stdSb.ToString().Trim()
+        ErrorOutput = $errorSb.ToString().Trim()
+        ExitCode = $ps.ExitCode
+    }
+
+    if ($Null -ne $process)
+    {
+        $ps.Dispose()
+    }
+    if ($Null -ne $stdEvent)
+    {
+        $stdEvent.StopJob()
+        $stdEvent.Dispose()
+    }
+    if ($Null -ne $errorEvent)
+    {
+        $errorEvent.StopJob()
+        $errorEvent.Dispose()
+    }
 }
 
 # DiscordやSlackにWebhookする
