@@ -295,16 +295,20 @@ foreach ($line in (Get-Content -LiteralPath $PSCommandPath) -split "`n")
     $line
 }
 
-"#--------------------ts・mp4の自動削除--------------------"
-#フォルダの合計サイズを設定値以下に丸め込む関数
+# フォルダの合計サイズを設定値以下に丸め込む関数
 function FolderRound
 {
-    param
-    (
-        [string]$Mode = "Warning",
-        [string]$Ext = "ts",
-        [string]$Path = "$env:FolderPath",
-        [string]$Round = 10GB
+    [CmdletBinding()]
+    param (
+        [Parameter()]
+        [String]
+        $Mode = "Warning",
+        [String]
+        $Ext = "ts",
+        [String]
+        $Path = $env:FolderPath,
+        [String]
+        $Round = 10GB
     )
     # ディレクトリ内のファイルを日付順ソートで取得
     $sortTsFolder = Get-ChildItem "$Path\*.$Ext" | Sort-Object LastWriteTime
@@ -312,27 +316,23 @@ function FolderRound
     # ディレクトリ内のファイルサイズの合計が$Roundより大きい場合実行し続ける
     for ($i = 0; ($sortTsFolder | Select-Object -Skip $i | Measure-Object -Sum Length).Sum -gt $Round; $i++)
     {
-        "WARN FolderRound: $Path is over $($Round/1GB)GB."
+        Write-Output "WARN FolderRound: $Path is over $Round."
         if ($Mode -eq "Delete")
         {
-            # 削除モードの場合
-            # 削除対象のファイル名
+            # Deleteモードの場合
+            # 削除対象
             $removeItem = ($sortTsFolder | Select-Object -Skip $i | Select-Object -Index 0).FullName
-            "DEBUG Remove-Item: $removeItem"
-
-            # $Extを削除
             Remove-Item -LiteralPath $removeItem
-
-            # $Ext=.tsなら.ts.program.txt, .ts.errを削除
-            if ($Ext -eq "ts")
-            {
-                ($removeItem + ".program.txt"),($removeItem + ".err") | ForEach-Object {
-                    # 存在しなくともエラーは吐かなくてよい
-                    Remove-Item -LiteralPath $_ -ErrorAction SilentlyContinue
-                }
-            }
+            Write-Host "INFO Remove-Item: $removeItem"
         } elseif ($Mode -eq "Warning")
         {
+            # Warningモードの場合
+            # forループから抜けてfunction内に戻る
+            break
+        }
+    }
+}
+
             # 警告モードの場合
             # エラーログに追記
             $err_detail="`n[FolderRound] ${Ext}ディレクトリが${Round}を超過"
