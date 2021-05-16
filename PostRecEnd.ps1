@@ -137,23 +137,29 @@ function Post
             Invoke-RestMethod -Uri $hookUrl -Method Post -Headers @{ "Content-Type" = "application/json" } -Body $payload
         }
     }
-    #BalloonTip
-    if ($balloontip_toggle)
-    {
-        #特定のTipIconのみを使用可
-        #[System.Windows.Forms.ToolTipIcon] | Get-Member -Static -Type Property
-        $balloon.BalloonTipIcon = [System.Windows.Forms.ToolTipIcon]::$tipicon
-        #表示するタイトル
-        $balloon.BalloonTipTitle = $tiptitle
-        #表示するメッセージ
-        $balloon.BalloonTipText = $content
-        #balloontip_toggle=1なら5000ミリ秒バルーンチップ表示
-        $balloon.ShowBalloonTip(5000)
-        #5秒待って
-        Start-Sleep -Seconds 5
-    }
-    #タスクトレイアイコン非表示(異常終了時は実行されずトレイに亡霊が残る仕様)
-    $balloon.Visible = $False
+#--------------------関数--------------------
+# NotifiIcon.BalloonTipを表示する
+function Send-BalloonTip
+{
+    [CmdletBinding()]
+    param (
+        [Parameter()]
+        [String]
+        $Icon = "Warning",
+        [String]
+        $Title = "$($MyInvocation.MyCommand.Name)",
+        [String]
+        $Text = "WARN Send-BalloonTip:`nUse -Text <String>"
+    )
+
+    #[System.Windows.Forms.ToolTipIcon] | Get-Member -Static -Type Property
+    $NotifyIcon.BalloonTipIcon = [System.Windows.Forms.ToolTipIcon]::$Icon
+    $NotifyIcon.BalloonTipTitle = $Title
+    $NotifyIcon.BalloonTipText = $Text
+
+    # 5000msバルーンチップを表示
+    $NotifyIcon.ShowBalloonTip(5000)
+    Start-Sleep -Milliseconds 5000
 }
 
 #視聴予約なら終了
@@ -253,29 +259,49 @@ function Send-Webhook
     Invoke-RestMethod -Uri $WebhookUrl -Method Post -Headers @{ "Content-Type" = "application/json" } -Body ([System.Text.Encoding]::UTF8.GetBytes(($Payload | ConvertTo-Json -Depth 5)))
 }
 
-#System.Windows.FormsクラスをPowerShellセッションに追加
+# System.Windows.Forms.NotifyIconを使う
 Add-Type -AssemblyName System.Windows.Forms
-#NotifyIconクラスをインスタンス化
-$balloon=New-Object System.Windows.Forms.NotifyIcon
-#powershellのアイコンを使用
-$balloon.Icon=[System.Drawing.Icon]::ExtractAssociatedIcon('C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe')
-#NotifyIcon.Textが64文字を超えると例外、String.Substringの開始値~終了値が文字数を超えると例外
-switch (("$($MyInvocation.MyCommand.Name):${env:FileName}.ts").Length) {
-    {$_ -ge 64} {$TextLength="63"}
-    {$_ -lt 64} {$TextLength="$_"}
-}
-#タスクトレイアイコンのヒントにファイル名を表示
-$balloon.Text=([string]($MyInvocation.MyCommand.Name) + ":${env:FileName}.ts").SubString(0,$TextLength)
-#タスクトレイアイコン表示
-$balloon.Visible=$True
+$NotifyIcon = New-Object System.Windows.Forms.NotifyIcon
+$ContextMenu = New-Object System.Windows.Forms.ContextMenu
 
-#NotifyIconクリックでログを既定のテキストエディタで開く
-$balloon.add_Click({
-    if ($_.Button -eq [System.Windows.Forms.MouseButtons]::Left)
-    {
-        &"${log_path}\${env:FileName}.log"
-    }
+# Windows PowerShellのアイコンを使用
+$NotifyIcon.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon('C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe')
+
+# マウスオーバー時に表示されるヒントにファイル名(64字未満)を表示
+$NotifyIcon.Text = [Regex]::Replace($MyInvocation.MyCommand.Name + ": $env:FileName.ts", "^(.{63}).*$", { $args.Groups[1].Value })
+
+# タスクトレイアイコン表示
+$NotifyIcon.Visible = $True
+
+# タスクトレイアイコンクリック時に表示されるコンテキストメニュー内のアイテムをクリックした時の動作
+
+$MenuItemViewLog = New-Object System.Windows.Forms.MenuItem
+$MenuItemViewLog.Text = "View log"
+$MenuItemViewLog.add_Click({
+    # ログファイルを既定のテキストエディタで開く
+    &"$($Settings.Log.Path)\$env:FileName.log"
 })
+
+$MenuItemOpenScriptLoc = New-Object System.Windows.Forms.MenuItem
+$MenuItemOpenScriptLoc.Text = "Open script location"
+$MenuItemOpenScriptLoc.add_Click({
+    # エクスプローラでこのスクリプトの場所を開く
+    &explorer.exe "$PSScriptRoot"
+})
+
+$MenuItemKillFFmpeg = New-Object System.Windows.Forms.MenuItem
+$MenuItemKillFFmpeg.Text = "Kill ffmpeg.exe under this process"
+$MenuItemKillFFmpeg.add_Click({
+    # エクスプローラでこのスクリプトの場所を開く
+    $ParentProcessIds = Get-CimInstance -Class Win32_Process -Filter "Name = 'ffmpeg.exe'"
+    Stop-Process -Id ($ParentProcessIds | Where-Object ParentProcessId -eq $PID).ProcessId
+})
+
+# タスクトレイアイコンクリック時に表示されるコンテキストメニュー
+$ContextMenu.MenuItems.Add($MenuItemViewLog)
+$ContextMenu.MenuItems.Add($MenuItemOpenScriptLoc)
+$ContextMenu.MenuItems.Add($MenuItemKillFFmpeg)
+$NotifyIcon.ContextMenu = $ContextMenu
 
 # ログ取り開始
 Start-Transcript -LiteralPath "$($Settings.Log.Path)\$env:FileName.log"
@@ -490,51 +516,9 @@ for ($i = 0; $i -lt 50 -And $ExitCode -ne 0; $i++)
     }
 }
 
-#エンコ後のmp4のファイルサイズ
-$mp4_size = $(Get-ChildItem -LiteralPath "${tmp_folder_path}\${env:FileName}.mp4").Length
-$PostFileSize="`nts:$([math]::round(${ts_size}/1GB,2))GB mp4:$([math]::round(${mp4_size}/1MB,0))MB"
-$PostFileSize
+#タスクトレイアイコン非表示(異常終了時は実行されずトレイに亡霊が残る仕様)
+$NotifyIcon.Visible = $False
+$NotifyIcon.Dispose()
 
-"#--------------------Backup and Sync--------------------"
-#Invoke-Processから渡された$StdErrからスペースを消す
-$StdErr=($StdErr -replace " ","")
-#ffmpegの終了コード、mp4のファイルサイズによる条件分岐
-if ($ExitCode -ne 0)
-{
-    #$StdErrをソートしPost内容を決める
-    switch ($StdErr)
-    {
-        {$_ -match 'Errorduringencoding:devicefailed'} {$err_detail+="`n[h264_qsv] device failed (-17)"}
-        {$_ -match 'Couldnotfindcodecparameters'} {$err_detail+="`n[mpegts] PIDの判別に失敗"}
-        {$_ -match 'Unsupportedchannellayout'} {$err_detail+="`n[aac] 非対応のチャンネルレイアウト"}
-        {$_ -match 'Toomanypacketsbuffered'} {$err_detail+="`n[-c:a aac] max_muxing_queue_size"}
-        {$_ -match 'Inputpackettoosmall'} {$err_detail+="`n[-c:a copy] PIDの判別に失敗"}
-        {$_ -match 'Invalidargument'} {$err_detail+="`n[FFmpeg] 無効な引数"}
-        default {$err_detail+="`n不明なエラー"}
-    }
-    #Twitter、Discord、BalloonTip
-    Post -Exc $True -Toggle $True -Content "Error:${env:FileName}.ts${err_detail}${PostFileSize}" -TipIcon 'Error' -TipTitle 'エンコード失敗'
-} elseif (($googledrive) -And ($mp4_size -gt 10GB))
-{
-    #Post内容
-    $err_detail+="`n[GoogleDrive] 10GB以上の為アップロードできません"
-    #Twitter、Discord、BalloonTip
-    Post -Exc $True -Toggle $True -Content "Error:${env:FileName}.ts${err_detail}${PostFileSize}" -TipIcon 'Error' -TipTitle 'アップロード失敗'
-} else
-{
-    #mp4をmp4_folder_pathに投げる
-    Move-Item -LiteralPath "$tmp_folder_path\$env:FileName.mp4" -Destination "$mp4_folder_path\$env:FileName.mkv"
-    #エラーメッセージが格納されていればTipIconをWarningに変える
-    if ($err_detail)
-    {
-        $TipIcon='Warning'
-    } else
-    {
-        $TipIcon='Info'
-    }
-    #Twitter、Discord、BalloonTip
-    Post -Exc $False -Toggle $InfoPostToggle -Content "${env:FileName}.ts${err_detail}${PostFileSize}" -TipIcon "$TipIcon" -TipTitle 'エンコード終了'
-}
-
-#ログ取り停止
+# ログ取り停止
 Stop-Transcript
