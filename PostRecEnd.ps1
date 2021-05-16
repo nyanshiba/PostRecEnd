@@ -333,31 +333,72 @@ function FolderRound
     }
 }
 
-            # 警告モードの場合
-            # エラーログに追記
-            $err_detail="`n[FolderRound] ${Ext}ディレクトリが${Round}を超過"
+# EpgTimer.exeのアセンブリを読む
+[void][Reflection.Assembly]::LoadFile("$PSScriptRoot\EpgTimer.exe")
 
-            # forループから抜けてfunction内に戻る
-            break
+# 予約一覧にタグ $env:BatFileTag が反映されていなくても、 $env:AddKey を含む自動予約登録 EpgTimer.CtrlCmdUtil.SendEnumEpgAutoAdd.searchInfo.andKey から searchInfo.BatFileTag の一致を行う
+# 録画後実行batタグ https://github.com/xtne6f/EDCB/blob/work-plus-s/Document/Readme_Mod.txt#L160-L163
+function Get-ImmediateBatFileTagforEpgAutoAdd
+{
+    [CmdletBinding()]
+    param (
+        [Parameter()]
+        [String]
+        $AddKey = $env:AddKey,
+        # サービス名 $EpgTimer.EpgAutoAddData.searchInfo.serviceList: OriginalNetworkID($env:ONID16), TransportStreamID(TSID16), ServiceID(SID16)
+        [String]
+        $OnTsSID10 = [Convert]::ToString("0x0$env:ONID16$env:TSID16$env:SID16", 10)
+    )
+
+    # EPG自動予約キーワードが空でなければ
+    if ($AddKey -And $OnTsSID10 -ne 0)
+    {
+        $EpgTimer =
+        @{
+            CtrlCmdUtil = New-Object EpgTimer.CtrlCmdUtil
+            EpgAutoAddData = New-Object Collections.Generic.List[EpgTimer.EpgAutoAddData]
         }
+
+        # 自動予約登録条件一覧を取得する
+        Write-Host "DEBUG Get-ImmediateBatFileTagforEpgAutoAdd:" ($EpgTimer.CtrlCmdUtil.SendEnumEpgAutoAdd([ref]$EpgTimer.EpgAutoAddData) -eq [EpgTimer.ErrCode]::CMD_SUCCESS)
+
+        # 自動予約登録条件一覧からサービス名とEPG自動予約キーワードが一致する最初の項目を選ぶ
+        $BatFilePath = ($EpgTimer.EpgAutoAddData | Where-Object {$OnTsSID10 -in $_.searchInfo.serviceList -And $_.searchInfo.andKey -match $AddKey}).recSetting.BatFilePath | Select-Object -Index 0
+
+        # BatFilePathからBatFileTagを抽出
+        $BatFileTag = $BatFilePath -replace (".*\*","")
+        Write-Host "DEBUG Get-ImmediateBatFileTagforEpgAutoAdd: $BatFileTag"
+        return $BatFileTag
+    }
+    else
+    {
+        Write-Host "WARN Get-ImmediateBatFileTagforEpgAutoAdd: -AddKey '$AddKey' and -OnTsSID10 '$OnTsSID10' are required"
+        return $False
     }
 }
 
-#Roundを超過した場合、$False:容量警告($Settings.Post) $True:拡張子がExtのファイルを古いものから削除
-#ts
-FolderRound -Mode $TsFolderRound -Ext "ts" -Path "$env:FolderPath" -Round $ts_folder_max
-#mp4
-FolderRound -Mode $Mp4FolderRound -Ext "mkv" -Path "$mp4_folder_path" -Round $mp4_folder_max
+# 録画情報からジャンルを取得
+function Get-ProgramInfoGenre
+{
+    [CmdletBinding()]
+    param (
+        [Parameter()]
+        [UInt32]
+        $RecInfoID = $env:RecInfoID
+    )
 
-"#--------------------tsファイルサイズ判別--------------------"
-#tsファイルサイズを取得
-$ts_size=(Get-ChildItem -LiteralPath "${env:FilePath}").Length
-if ($tssize_toggle) {
-    #閾値$tssize_max以下なら通常品質$quality_normal、より大きいなら低品質$quality_low
-    switch ($ts_size) {
-        {$_ -le $tssize_max} {$ArgQual="$quality_normal"}
-        {$_ -gt $tssize_max} {$ArgQual="$quality_low"}
+    # EpgTimer.CtrlCmdUtil API https://github.com/xtne6f/EDCB/blob/work-plus-s/Document/Readme_Mod.txt#L630-L634
+    $EpgTimer =
+    @{
+        CtrlCmdUtil = New-Object EpgTimer.CtrlCmdUtil
+        RecFileInfo = New-Object EpgTimer.RecFileInfo
     }
+    # 録画済み情報取得 https://github.com/xtne6f/EDCB/blob/work-plus-s/EpgTimer/EpgTimer/Common/CtrlCmd.cs#L616-L617
+    Write-Host "DEBUG Get-ProgramInfoGenre:" ($EpgTimer.CtrlCmdUtil.SendGetRecInfo([uint32]$RecInfoID, [ref]$EpgTimer.RecFileInfo) -eq [EpgTimer.ErrCode]::CMD_SUCCESS)
+
+    # 番組情報からジャンルを抽出し、KeywordGenreに一致させる
+    return ($EpgTimer.RecFileInfo.ProgramInfo -split '\r?\n' | Select-String -Pattern "ジャンル" -Context 0,3).Context.PostContext
+}
 
 # デュアルモノ判別
 function Get-ArgumentsDualMono
