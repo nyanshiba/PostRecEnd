@@ -370,21 +370,32 @@ if (Get-Content -LiteralPath "${env:FilePath}.program.txt" | Select-String -Simp
 }
 "DEBUG ArgAudio:$ArgAudio"
 
-"#--------------------PIDの判別--------------------"
 # PID引数の設定
+function Get-ArgumentsPID
+{
+    [CmdletBinding()]
+    param (
+        [Parameter()]
+        [String]
+        $FilePath = $env:FilePath
+    )
 
-# ffprobeでcodec_type,height,idをソート
-$stream = (&"$ffpath\ffprobe.exe" -v quiet -analyzeduration 30M -probesize 100M -i "${env:FilePath}" -show_entries stream=codec_type,height,id,channels -print_format json 2>&1 | ConvertFrom-Json).programs.streams
-$stream | Format-Table -Property codec_type,height,id,channels
+    # ffprobeでcodec_type,height,idをソート
+    $stream = (&"ffprobe.exe" -v quiet -analyzeduration 30M -probesize 100M -i "$FilePath" -show_entries stream=codec_type,height,id,channels -print_format json 2>&1 | ConvertFrom-Json).programs.streams
+    $stream | Format-Table -Property codec_type,height,id,channels
 
-# 解像度の大きいVideoストリームを選ぶ
-[string[]]$ArgPid = ($stream | Where-Object {$_.codec_type -eq "video"} | Sort-Object -Property height -Descending | Select-Object -Index 0).id
+    # 解像度の大きいVideoストリームを選ぶ
+    [string[]]$ArgPID = ($stream | Where-Object {$_.codec_type -eq "video"} | Sort-Object -Property height -Descending | Select-Object -Index 0).id
 
-# VideoのPIDの先頭(0x1..)と一致するAudioストリームを選ぶ
-$ArgPid += ($stream | Where-Object {$_.codec_type -eq "audio" -And $_.channels -ne "0" -And $_.id -match ($ArgPid).Substring(0,3)}).id
+    # VideoのPIDの先頭(0x1..)と一致するAudioストリームを選ぶ
+    $ArgPID += ($stream | Where-Object {$_.codec_type -eq "audio" -And $_.channels -ne "0" -And $_.id -match ($ArgPID).Substring(0,3)}).id
 
-# FFmpeg引数のフォーマットに直す
-[string]$ArgPid = "-map i:" + ($ArgPid -join " -map i:")
+    # FFmpeg引数のフォーマットに直す
+    [string]$ArgPID = "-map i:" + ($ArgPID -join " -map i:")
+    Write-Host "DEBUG Get-ArgumentsPID: $ArgPID"
+    return $ArgPID
+}
+
 
 "DEBUG ArgPid: $ArgPid"
 
