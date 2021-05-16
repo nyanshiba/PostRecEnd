@@ -277,15 +277,18 @@ $balloon.add_Click({
     }
 })
 
+# ログ取り開始
+Start-Transcript -LiteralPath "$($Settings.Log.Path)\$env:FileName.log"
+
 "#--------------------ログ--------------------"
-#古いログの削除
-Get-ChildItem -LiteralPath "${log_path}\" -Include *.txt,*.log | Sort-Object LastWriteTime -Descending | Select-Object -Skip $logcnt_max | ForEach-Object {
+# 古いログの削除
+Get-ChildItem -LiteralPath "$($Settings.Log.Path)\" -Include *.log | Sort-Object LastWriteTime -Descending | Select-Object -Skip $Settings.Log.CntMax | ForEach-Object {
     Remove-Item -LiteralPath "$_"
     "INFO Remove-Item: $_"
 }
 
 "#--------------------ユーザ設定--------------------"
-#ユーザ設定をログに記述
+# ユーザ設定をログに記述
 foreach ($line in (Get-Content -LiteralPath $PSCommandPath) -split "`n")
 {
     if ($line -match '#--------------------関数--------------------')
