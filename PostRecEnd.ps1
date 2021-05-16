@@ -2,141 +2,126 @@
 #Requires -Version 5
 #Requires -PSEdition Desktop
 
-
-
-#ffmpeg.exe、ffprobe.exeがあるディレクトリ
-$ffpath='C:\bin\ffmpeg'
-
-#--------------------ログ--------------------
-#ログ出力ディレクトリ
-$log_path='C:\logs\PostRecEnd'
-#ログを残す数
-$logcnt_max=500
-
-#--------------------tsの自動削除--------------------
-#閾値を超過した場合、Warning=容量警告、Delete=tsを自動削除
-$TsFolderRound="Delete"
-#録画フォルダの上限
-$ts_folder_max=150GB
-
-#--------------------mp4の自動削除--------------------
-#閾値を超過した場合、Warning=容量警告、Delete=tsを自動削除
-$Mp4FolderRound="Delete"
-#mp4用フォルダの上限
-$mp4_folder_max=50GB
-
-#--------------------tsファイルサイズ判別--------------------
-#映像の品質引数をtsファイルサイズによって適応的に変える($ArgQual)
-#適応品質機能 $False=無効(エンコード引数内に記述)、$True=通常・低品質を閾値で切り替え
-$tssize_toggle=$True
-#閾値
-$tssize_max=20GB #くらいがおすすめ
-#通常品質(LA-ICQ:27,x265:25)
-$quality_normal='-init_qpI 21 -init_qpP 21 -init_qpB 23'
-#低品質(LA-ICQ:30,x265:27)
-$quality_low='-init_qpI 23 -init_qpP 23 -init_qpB 26'
-
-#--------------------デュアルモノの判別--------------------
-#音声引数をデュアルモノか否かで変える($ArgAudio)
-#デュアルモノ
-$audio_dualmono='-strict -2 -c:a aac -b:a 128k -aac_coder twoloop -ac 1 -max_muxing_queue_size 4000 -filter_complex channelsplit'
-#通常
-$audio_normal='-strict -2 -c:a aac -b:a 256k -aac_coder twoloop -ac 2 -max_muxing_queue_size 4000' #失敗しない、ただし再エンコ
-#$audio_normal='-strict -2 -c:a flac -ac 2 -max_muxing_queue_size 4000'
-#$audio_normal='-c:a copy' #失敗する上ExitCode=0
-#$audio_normal='-c:a copy -bsf:a aac_adtstoasc' 失敗する上ExitCode=0
-
-#--------------------PIDの判別--------------------
-#必要なPIDを取得し-map引数に加える($ArgPid)
-
-#--------------------エンコード--------------------
-#mp4の一時出力ディレクトリ
-$tmp_folder_path='C:\Rec\tmp'
-#mp4保存(Backup and Sync、ローカル保存)用ディレクトリ
-$mp4_folder_path='C:\Rec\mp4'
-#例外ディレクトリ(ループしてもffmpegの処理に失敗、mp4が10GBより大きい場合 etc…にts、ts.program.txt、ts.err、mp4を退避)
-$err_folder_path='C:\Rec\Err'
-#mp4の10GBファイルサイズ上限 $True=有効 $False=無効
-$googledrive=$True
-#mp4用ffmpeg引数 
-<#
--File: 実行ファイルのパス
--Arg: 引数
-    $ArgAudio(エンコ失敗しない為に必須)
-    $ArgQual(エンコード引数内に記述し品質やビットレートを固定する場合不要)
-    $ArgPid(エンコ失敗しない為に必須)
--Priority: プロセス優先度 MSDNのProcess.PriorityClass参照 (Normal,Idle,High,RealTime,BelowNormal,AboveNormal) ※必須ではない
--Affinity: 使用する論理コアの指定 MSDNのProcess.ProcessorAffinity参照 コア5(10000)～12(100000000000)を使用=0000111111110000(2進)=4080(10進)=0xFF0(16進) ※必須ではない
-
-NVEnc H.264 VBR MinQP
--Arg "-y -nostats -fflags +discardcorrupt -i `"${env:FilePath}`" ${ArgAudio} -vf bwdif=0:-1:1 -c:v h264_nvenc -preset:v slow -profile:v high -rc:v vbr_minqp -rc-lookahead 32 -spatial-aq 1 -aq-strength 1 -qmin:v 23 -qmax:v 25 -b:v 1500k -maxrate:v 3500k -pix_fmt yuv420p ${ArgPid} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
-QSV H.264 LA-ICQ
--Arg "-y -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -ss 5 -i `"${env:FilePath}`" ${ArgAudio} -vf bwdif=0:-1:1,pp=ac,hqdn3d=2.0 -global_quality ${ArgQual} -c:v h264_qsv -preset:v veryslow -g 300 -bf 6 -refs 4 -b_strategy 1 -look_ahead 1 -look_ahead_depth 60 -pix_fmt nv12 -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${ArgPid} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
-x265 fast
--Arg "-y -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" ${ArgAudio} -vf bwdif=0:-1:1,pp=ac -c:v libx265 -crf ${ArgQual} -preset:v fast -g 15 -bf 2 -refs 4 -pix_fmt yuv420p -bsf:v hevc_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${ArgPid} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
-x265 fast bel9r inspire
--Arg "-y -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" ${ArgAudio} -vf bwdif=0:-1:1,pp=ac -c:v libx265 -preset:v fast -x265-params crf=${ArgQual}:rc-lookahead=40:psy-rd=0.3:keyint=15:no-open-gop:bframes=2:rect=1:amp=1:me=umh:subme=3:ref=3:rd=3 -pix_fmt yuv420p -bsf:v hevc_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${ArgPid} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
-x264 placebo by bel9r
--Arg "-y -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" ${ArgAudio} -vf bwdif=0:-1:1,pp=ac -c:v libx264 -preset:v placebo -x264-params crf=${ArgQual}:rc-lookahead=60:qpmin=5:qpmax=40:qpstep=16:qcomp=0.85:mbtree=0:vbv-bufsize=31250:vbv-maxrate=25000:aq-strength=0.35:psy-rd=0.35:keyint=300:bframes=6:partitions=p8x8,b8x8,i8x8,i4x4:merange=64:ref=4:no-dct-decimate=1 -pix_fmt yuv420p -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1 ${ArgPid} -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`""
-#>
-$VideoEncode =
-({
-    #hevc_nvenc constqp (qpI,P,Bはtsファイルサイズ判別を参照)
-    Invoke-Process -File "${ffpath}\ffmpeg.exe" -Arg "-y -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"${env:FilePath}`" $ArgAudio -vf pullup,dejudder,idet=intl_thres=1.38:prog_thres=1.5,yadif=mode=send_field:parity=auto:deint=interlaced,fps=fps=30000/1001:round=zero -c:v hevc_nvenc -preset:v p7 -profile:v main10 -rc:v constqp -rc-lookahead 1 -spatial-aq 0 -temporal-aq 1 -weighted_pred 0 $ArgQual -b_ref_mode 1 -dpb_size 4 -multipass 2 -g 60 -bf 3 -pix_fmt yuv420p10le $ArgPid -movflags +faststart `"${tmp_folder_path}\${env:FileName}.mp4`"" -Priority 'BelowNormal' -Affinity '0xFFF'
-})
-
-#--------------------Post--------------------
-#$False=Error時のみ、$True=常時 Twitter、DiscordにPost
-$InfoPostToggle=$False
-
-#Discord機能 $False=無効、$True=有効
-$discord_toggle=$True
-#webhook url
-$hookUrl='https://discordapp.com/api/webhooks/XXXXXXXXXX'
-
-#BalloonTip機能 $False=無効、$True=有効
-$balloontip_toggle=$True
-
-
-#--------------------関数--------------------
-function Post
-{
-    param
-    (
-        [bool]$exc,
-        [bool]$toggle,
-        [string]$content,
-        [string]$tipicon,
-        [string]$tiptitle
-    )
-    #例外。自動削除が有効の場合、ts、ts.program.txt、ts.err、mp4を退避
-    if ($exc)
-    {
-        if ($TsFolderRound)
-        {
-            Move-Item -LiteralPath "${env:FilePath}" "${err_folder_path}" -ErrorAction SilentlyContinue
-            Move-Item -LiteralPath "${env:FilePath}.program.txt" "${err_folder_path}" -ErrorAction SilentlyContinue
-            Move-Item -LiteralPath "${env:FilePath}.err" "${err_folder_path}" -ErrorAction SilentlyContinue
-        }
-        if ($Mp4FolderRound)
-        {
-            Move-Item -LiteralPath "${tmp_folder_path}\${env:FileName}.mp4" "${err_folder_path}" -ErrorAction SilentlyContinue
-        }
+#--------------------ユーザ設定--------------------
+$Settings =
+@{
+    Log =
+    @{
+        # ログ出力先
+        Path = 'C:\logs\PostRecEnd'
+        # ログを残す件数
+        CntMax = 500
     }
-    #Error時だけでなく、Info時もPostできるようにするトグル
-    if ($toggle)
-    {
-        #Discord警告
-        if ($discord_toggle)
-        {
-            $payload = [PSCustomObject]@{
-                content = $content
+    Post =
+    @{
+        # Webhook Url
+        WebhookUrl = "https://discord.com/api/webhooks/XXXXXXXXXX"
+    }
+    Profiles =
+    @(
+        @{
+            # 実行条件例 番組名(ファイル名) $env:FileName の部分一致の例
+            Conditional = {$env:FileName -match "ほげほげぷー|ふがふがぽー"}
+
+            # 処理内容 tsをHDDに移動
+            ScriptBlock =
+            {
+                Copy-Item -LiteralPath "$env:FilePath" "E:\ts" -ErrorAction SilentlyContinue
             }
-            $payload = ($payload | ConvertTo-Json)
-            $payload = [System.Text.Encoding]::UTF8.GetBytes($payload)
-            Invoke-RestMethod -Uri $hookUrl -Method Post -Headers @{ "Content-Type" = "application/json" } -Body $payload
         }
-    }
+        @{
+            # 実行条件例 ジャンルの部分一致
+            Conditional = {Get-ProgramInfoGenre -match "帝国内アニメ"}
+            ScriptBlock =
+            {
+                # 引数を変えてエンコする, 画像を出力する等
+            }
+        }
+        # $env:BatFileTag = ts: HDDにtsを移動, HDDの容量圧迫警告
+        @{
+            # 実行条件 録画後実行batタグが"ts"(tsをHDDに永久保存)のとき
+            Conditional =
+            {
+                # 通常は$env:BatFileTagで十分
+                # Get-ImmediateBatFileTagforEpgAutoAddは予約一覧にタグが反映されていなくても、自動予約登録を参照する
+                # EpgTimerの予約一覧/自動予約登録で"タグ"プロパティを追加すると分かりやすい
+                $env:BatFileTag -eq "ts" -Or (Get-ImmediateBatFileTagforEpgAutoAdd -eq "ts")
+            }
+            ScriptBlock =
+            {
+                # HDDにtsを移動
+                Move-Item -LiteralPath $env:FilePath -Destination "E:\ts" -ErrorAction Stop
+
+                # HDDの容量監視 -Round超過で通知
+                $Text = FolderRound -Mode 'Warning' -Ext '*' -Path "E:\ts" -Round 13TB
+                if (![string]::IsNullOrEmpty($Text))
+                {
+                    Send-Webhook -Text $Text
+                    Send-BalloonTip -Icon 'Warning' -Text $Text
+                }
+            }
+        }
+        # $env:BatFileTag = enc,encremove: エンコード
+        @{
+            Conditional = {Get-ImmediateBatFileTagforEpgAutoAdd -in "enc","encremove"}
+            ScriptBlock =
+            {
+                # エンコード
+                # 関数 Get-ArgumentsDualMono はステレオかデュアルモノかを判別し、引数を補完する NHKニュース7やその前後の番組で確認するとよい
+                # 関数 Get-ArgumentsPID はtsから必要なPIDを取得してFFmpegに渡す インターミッションで確認するとよい
+                $Process = Invoke-Process -FileName 'ffmpeg.exe' -Arguments "-y -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"env:FilePath`" -c:a libfdk_aac -vbr 5 -max_muxing_queue_size 4000 $(Get-ArgumentsDualMono -Stereo '-ac 2' -DualMono '-ac 1 -filter_complex channelsplit') -vf dejudder,fps=30000/1001:round=zero,fieldmatch=mode=pc:combmatch=full:combpel=70,yadif=mode=send_frame:parity=auto:deint=interlaced -c:v hevc_nvenc -preset:v p7 -profile:v main10 -rc:v constqp -rc-lookahead 1 -spatial-aq 0 -temporal-aq 1 -weighted_pred 0 -init_qpI 21 -init_qpP 21 -init_qpB 23 -b_ref_mode 1 -dpb_size 4 -multipass 2 -g 60 -bf 3 -pix_fmt yuv420p10le $(Get-ArgumentsPID) -movflags +faststart `"$env:USERPROFILE\Videos\encoded\$env:FileName.mp4`""
+                $Process = Invoke-Process
+                $Process | Format-List -Property *
+
+                # FFmpegの終了コードが0でなければ通知する
+                $Text = "Invoke-Process: エンコードに失敗 終了コード: $($Process.ExitCode)"
+                if ($Process.ExitCode -ne 0)
+                {
+                    Send-Webhook -Text $Text
+                    Send-BalloonTip -Icon 'Error' -Text $Text
+                }
+            }
+        }
+        # $env:BatFileTag = enc: HDDにmp4を移動, HDDの容量圧迫警告
+        @{
+            Conditional = {Get-ImmediateBatFileTagforEpgAutoAdd -eq "enc"}
+            ScriptBlock =
+            {
+                # HDDにmp4をコピー
+                Move-Item -LiteralPath "$env:USERPROFILE\Videos\encoded\$env:FileName.mp4" -Destination "E:\ts"
+
+                # HDDの容量監視 -Round超過で通知
+                $Text = FolderRound -Mode 'Warning' -Ext '*' -Path "E:\ts" -Round 13TB
+                if (![string]::IsNullOrEmpty($Text))
+                {
+                    Send-Webhook -Text $Text
+                    Send-BalloonTip -Icon 'Warning' -Text $Text
+                }
+            }
+        }
+        # $env:BatFileTag = encremove: エンコード先のローテ
+        @{
+            Conditional = {Get-ImmediateBatFileTagforEpgAutoAdd -eq "encremove"}
+            ScriptBlock =
+            {
+                # 一時エンコード先のmp4を閾値を超えたら削除
+                FolderRound -Mode 'Delete' -Ext "mp4" -Path "$env:USERPROFILE\Videos\encoded" -Round 50GB
+            }
+        }
+        # tsremove,enc,encremove ≒ always: 録画先のローテ
+        @{
+            # 実行条件 常に実行
+            Conditional = {$True}
+            # 処理内容 ts容量監視
+            ScriptBlock =
+            {
+                # 録画保存フォルダのtsを閾値を超えたら削除
+                FolderRound -Mode 'Delete' -Ext "ts" -Path "$env:FolderPath" -Round 200GB
+            }
+        }
+    )
+}
+
 #--------------------関数--------------------
 # NotifiIcon.BalloonTipを表示する
 function Send-BalloonTip
@@ -535,28 +520,12 @@ function Get-ArgumentsPID
     return $ArgPID
 }
 
-
-"DEBUG ArgPid: $ArgPid"
-
-"#--------------------エンコード--------------------"
-#終了コードが1且つループカウントが50未満までの間、エンコードを試みる
-for ($i = 0; $i -lt 50 -And $ExitCode -ne 0; $i++)
-{
-    #再試行時からクールタイムを追加
-    if ($i -gt 0)
+"#--------------------プロファイル別処理(メインルーチン)--------------------"
+# $Settings.Profilesの実行条件と処理内容を回す
+$Settings.Profiles | Where-Object Conditional -And ScriptBlock | ForEach-Object {
+    if (Invoke-Command -ScriptBlock $_.Conditional)
     {
-        Start-Sleep -s 60
-    }
-    
-    #エンコ mp4用ffmpeg引数を遅延展開
-    Invoke-Command -Command $VideoEncode
-    "DEBUG ExitCode:$ExitCode"
-
-    #エンコ1回目と成功時(ExitCode:0)のログだけで十分
-    if ($i -eq 0 -Or $ExitCode -eq 0)
-    {
-        #プロセスの標準エラー出力をシェルの標準出力に出力
-        $StdErr
+        Invoke-Command -ScriptBlock $_.ScriptBlock
     }
 }
 
