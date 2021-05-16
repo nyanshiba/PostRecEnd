@@ -358,17 +358,42 @@ if ($tssize_toggle) {
         {$_ -le $tssize_max} {$ArgQual="$quality_normal"}
         {$_ -gt $tssize_max} {$ArgQual="$quality_low"}
     }
-    "DEBUG ArgQual:$ArgQual"
-}
 
-"#--------------------デュアルモノの判別--------------------"
-#番組情報ファイルがありデュアルモノという文字列があればTrue、文字列がない場合はFalse、番組情報ファイルが無ければNull
-if (Get-Content -LiteralPath "${env:FilePath}.program.txt" | Select-String -SimpleMatch 'デュアルモノ' -quiet) {
-    $ArgAudio=$audio_dualmono
-} else {
-    $ArgAudio=$audio_normal
+# デュアルモノ判別
+function Get-ArgumentsDualMono
+{
+    [CmdletBinding()]
+    param (
+        [Parameter()]
+        [String]
+        $Stereo,
+        [String]
+        $DualMono,
+        [UInt32]
+        $RecInfoID = $env:RecInfoID
+    )
+
+    # EpgTimer.CtrlCmdUtil
+    $EpgTimer =
+    @{
+        CtrlCmdUtil = New-Object EpgTimer.CtrlCmdUtil
+        RecFileInfo = New-Object Collections.Generic.List[EpgTimer.RecFileInfo]
+    }
+    # 録画済み情報取得
+    [void]($EpgTimer.CtrlCmdUtil.SendGetRecInfo([uint32]$RecInfoID, [ref]$EpgTimer.RecFileInfo) -eq [EpgTimer.ErrCode]::CMD_SUCCESS)
+
+    # 番組情報からジャンルを抽出し、KeywordGenreに一致させる
+    if ($EpgTimer.RecFileInfo.ProgramInfo | Select-String -Pattern "デュアルモノ")
+    {
+        Write-Host "DEBUG Get-ArgumentsDualMono: $ArgPID"
+        return $DualMono
+    }
+    else
+    {
+        Write-Host "DEBUG Get-ArgumentsDualMono: $ArgPID"
+        return $Stereo
+    }
 }
-"DEBUG ArgAudio:$ArgAudio"
 
 # PID引数の設定
 function Get-ArgumentsPID
