@@ -12,6 +12,37 @@ $Settings =
         # ログを残す件数
         CntMax = 500
     }
+    MenuItem =
+    @(
+        @{
+            Text = "View Log"
+            Click =
+            {
+                # ログファイルを既定のテキストエディタで開く
+                &"$($Settings.Log.Path)\$env:FileName.log"
+            }
+        }
+        @{
+            Text = "Open script location"
+            Click =
+            {
+                # エクスプローラでこのスクリプトの場所を開く
+                &explorer.exe $PSScriptRoot
+            }
+        }
+        @{
+            Text = "Kill ffmpeg.exe under this process"
+            Click =
+            {
+                # エクスプローラでこのスクリプトの場所を開く
+                # $ParentProcessIds = Get-CimInstance -Class Win32_Process -Filter "Name = 'ffmpeg.exe'"
+                # Stop-Process -Id ($ParentProcessIds | Where-Object ParentProcessId -eq $PID).ProcessId
+                
+                # 信頼性に乏しいのでタスクマネージャを開いておく
+                &taskmgr.exe
+            }
+        }
+    )
     Post =
     @{
         # Webhook Url
@@ -300,10 +331,29 @@ function Send-Webhook
     Invoke-RestMethod -Uri $WebhookUrl -Method Post -Headers @{ "Content-Type" = "application/json" } -Body ([System.Text.Encoding]::UTF8.GetBytes(($Payload | ConvertTo-Json -Depth 5)))
 }
 
-# System.Windows.Forms.NotifyIconを使う
+# MenuItem内容がバックグラウンド実行できるようにイベント登録
+function Register-ContextMenuItem
+{
+    [CmdletBinding()]
+    param (
+        [Parameter()]
+        [String]
+        $Text,
+        [ScriptBlock]
+        $Click
+    )
+
+    $MenuItem = New-Object System.Windows.Forms.MenuItem
+    $MenuItem.Text = $_.Text
+    # $MenuItem.add_Click([ScriptBlock]$_.add_Click)
+    # Get-EventSubscriber
+    Write-Host "DEBUG Invoke-NotifyIcon MenuItem Event:" (Register-ObjectEvent -InputObject $MenuItem -EventName Click -Action $_.Click).Name
+    return $MenuItem
+}
+
+# System.Windows.Forms.NotifyIcon, ContextMenu, MenuItemを使う
 Add-Type -AssemblyName System.Windows.Forms
 $NotifyIcon = New-Object System.Windows.Forms.NotifyIcon
-$ContextMenu = New-Object System.Windows.Forms.ContextMenu
 
 # Windows PowerShellのアイコンを使用
 $NotifyIcon.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon('C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe')
@@ -314,35 +364,16 @@ $NotifyIcon.Text = [Regex]::Replace($MyInvocation.MyCommand.Name + ": $env:FileN
 # タスクトレイアイコン表示
 $NotifyIcon.Visible = $True
 
-# タスクトレイアイコンクリック時に表示されるコンテキストメニュー内のアイテムをクリックした時の動作
-
-$MenuItemViewLog = New-Object System.Windows.Forms.MenuItem
-$MenuItemViewLog.Text = "View log"
-$MenuItemViewLog.add_Click({
-    # ログファイルを既定のテキストエディタで開く
-    &"$($Settings.Log.Path)\$env:FileName.log"
-})
-
-$MenuItemOpenScriptLoc = New-Object System.Windows.Forms.MenuItem
-$MenuItemOpenScriptLoc.Text = "Open script location"
-$MenuItemOpenScriptLoc.add_Click({
-    # エクスプローラでこのスクリプトの場所を開く
-    &explorer.exe "$PSScriptRoot"
-})
-
-$MenuItemKillFFmpeg = New-Object System.Windows.Forms.MenuItem
-$MenuItemKillFFmpeg.Text = "Kill ffmpeg.exe under this process"
-$MenuItemKillFFmpeg.add_Click({
-    # エクスプローラでこのスクリプトの場所を開く
-    $ParentProcessIds = Get-CimInstance -Class Win32_Process -Filter "Name = 'ffmpeg.exe'"
-    Stop-Process -Id ($ParentProcessIds | Where-Object ParentProcessId -eq $PID).ProcessId
-})
-
-# タスクトレイアイコンクリック時に表示されるコンテキストメニュー
-$ContextMenu.MenuItems.Add($MenuItemViewLog)
-$ContextMenu.MenuItems.Add($MenuItemOpenScriptLoc)
-$ContextMenu.MenuItems.Add($MenuItemKillFFmpeg)
+# タスクトレイアイコン右クリック時に表示されるコンテキストメニュー
+$ContextMenu = New-Object System.Windows.Forms.ContextMenu
 $NotifyIcon.ContextMenu = $ContextMenu
+
+# コンテキストメニュー内容を設定
+$Settings.MenuItem | ForEach-Object {
+    $ContextMenu.MenuItems.Add((
+        Register-ContextMenuItem -Text $_.Text -Click ([ScriptBlock]$_.Click)
+    ))
+}
 
 # ログ取り開始
 Start-Transcript -LiteralPath "$($Settings.Log.Path)\$env:FileName.log"
