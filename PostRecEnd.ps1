@@ -20,6 +20,26 @@ $Settings =
     Profiles =
     @(
         @{
+            # 常に最初に実行
+            Conditional = {$True}
+            ScriptBlock =
+            {
+                #視聴予約なら終了
+                if ($env:RecMode -eq 4)
+                {
+                    Send-BalloonTip -Icon 'Info' -Text "視聴予約 $env:Title"
+                    exit
+                }
+                # ファイル名が空なら
+                elseif ([string]::IsNullOrEmpty($env:FilePath))
+                {
+                    $Text = "録画失敗 $env:Title"
+                    Send-Webhook -Text $Text
+                    Send-BalloonTip -Icon 'Error' -Text $Text
+                }
+            }
+        }
+        @{
             # 実行条件例 番組名(ファイル名) $env:FileName の部分一致の例
             Conditional = {$env:FileName -match "ほげほげぷー|ふがふがぽー"}
 
@@ -145,14 +165,6 @@ function Send-BalloonTip
     # 5000msバルーンチップを表示
     $NotifyIcon.ShowBalloonTip(5000)
     Start-Sleep -Milliseconds 5000
-}
-
-#視聴予約なら終了
-if ($env:RecMode -eq 4) {
-    return "視聴予約の為終了"
-}
-if ("${env:FilePath}" -eq $null) {
-    Post -Exc $True -Toggle $True -Content "Error:${env:Title}`n[EDCB] 録画失敗によりエンコード不可" -TipIcon 'Error' -TipTitle '録画失敗'
 }
 
 # ffmpeg, &ffmpeg, .\ffmpegでは複雑な引数に対応できない
