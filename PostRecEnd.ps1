@@ -174,30 +174,6 @@ $Settings =
 }
 
 #--------------------関数--------------------
-# NotifiIcon.BalloonTipを表示する
-function Send-BalloonTip
-{
-    [CmdletBinding()]
-    param (
-        [Parameter()]
-        [String]
-        $Icon = "Warning",
-        [String]
-        $Title = "$($MyInvocation.MyCommand.Name)",
-        [String]
-        $Text = "WARN Send-BalloonTip:`nUse -Text <String>"
-    )
-
-    #[System.Windows.Forms.ToolTipIcon] | Get-Member -Static -Type Property
-    $NotifyIcon.BalloonTipIcon = [System.Windows.Forms.ToolTipIcon]::$Icon
-    $NotifyIcon.BalloonTipTitle = $Title
-    $NotifyIcon.BalloonTipText = $Text
-
-    # 5000msバルーンチップを表示
-    $NotifyIcon.ShowBalloonTip(5000)
-    Start-Sleep -Milliseconds 5000
-}
-
 # ffmpeg, &ffmpeg, .\ffmpegでは複雑な引数に対応できない
 # Start-ProcessのStandardOutput, Errorはファイル出力のみ
 function Invoke-Process
@@ -329,71 +305,6 @@ function Send-Webhook
         }
     }
     Invoke-RestMethod -Uri $WebhookUrl -Method Post -Headers @{ "Content-Type" = "application/json" } -Body ([System.Text.Encoding]::UTF8.GetBytes(($Payload | ConvertTo-Json -Depth 5)))
-}
-
-# MenuItem内容がバックグラウンド実行できるようにイベント登録
-function Register-ContextMenuItem
-{
-    [CmdletBinding()]
-    param (
-        [Parameter()]
-        [String]
-        $Text,
-        [ScriptBlock]
-        $Click
-    )
-
-    $MenuItem = New-Object System.Windows.Forms.MenuItem
-    $MenuItem.Text = $_.Text
-    # $MenuItem.add_Click([ScriptBlock]$_.add_Click)
-    # Get-EventSubscriber
-    Write-Host "DEBUG Invoke-NotifyIcon MenuItem Event:" (Register-ObjectEvent -InputObject $MenuItem -EventName Click -Action $_.Click).Name
-    return $MenuItem
-}
-
-# System.Windows.Forms.NotifyIcon, ContextMenu, MenuItemを使う
-Add-Type -AssemblyName System.Windows.Forms
-$NotifyIcon = New-Object System.Windows.Forms.NotifyIcon
-
-# Windows PowerShellのアイコンを使用
-$NotifyIcon.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon('C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe')
-
-# マウスオーバー時に表示されるヒントにファイル名(64字未満)を表示
-$NotifyIcon.Text = [Regex]::Replace($MyInvocation.MyCommand.Name + ": $env:FileName.ts", "^(.{63}).*$", { $args.Groups[1].Value })
-
-# タスクトレイアイコン表示
-$NotifyIcon.Visible = $True
-
-# タスクトレイアイコン右クリック時に表示されるコンテキストメニュー
-$ContextMenu = New-Object System.Windows.Forms.ContextMenu
-$NotifyIcon.ContextMenu = $ContextMenu
-
-# コンテキストメニュー内容を設定
-$Settings.MenuItem | ForEach-Object {
-    $ContextMenu.MenuItems.Add((
-        Register-ContextMenuItem -Text $_.Text -Click ([ScriptBlock]$_.Click)
-    ))
-}
-
-# ログ取り開始
-Start-Transcript -LiteralPath "$($Settings.Log.Path)\$env:FileName.log"
-
-"#--------------------ログ--------------------"
-# 古いログの削除
-Get-ChildItem -LiteralPath "$($Settings.Log.Path)\" -Include *.log | Sort-Object LastWriteTime -Descending | Select-Object -Skip $Settings.Log.CntMax | ForEach-Object {
-    Remove-Item -LiteralPath "$_"
-    "INFO Remove-Item: $_"
-}
-
-"#--------------------ユーザ設定--------------------"
-# ユーザ設定をログに記述
-foreach ($line in (Get-Content -LiteralPath $PSCommandPath) -split "`n")
-{
-    if ($line -match '#--------------------関数--------------------')
-    {
-        break
-    }
-    $line
 }
 
 # フォルダの合計サイズを設定値以下に丸め込む関数
@@ -561,6 +472,96 @@ function Get-ArgumentsPID
     [string]$ArgPID = "-map i:" + ($ArgPID -join " -map i:")
     Write-Host "DEBUG Get-ArgumentsPID: $ArgPID"
     return $ArgPID
+}
+
+# NotifiIcon.BalloonTipを表示する
+function Send-BalloonTip
+{
+    [CmdletBinding()]
+    param (
+        [Parameter()]
+        [String]
+        $Icon = "Warning",
+        [String]
+        $Title = "$($MyInvocation.MyCommand.Name)",
+        [String]
+        $Text = "WARN Send-BalloonTip:`nUse -Text <String>"
+    )
+
+    #[System.Windows.Forms.ToolTipIcon] | Get-Member -Static -Type Property
+    $NotifyIcon.BalloonTipIcon = [System.Windows.Forms.ToolTipIcon]::$Icon
+    $NotifyIcon.BalloonTipTitle = $Title
+    $NotifyIcon.BalloonTipText = $Text
+
+    # 5000msバルーンチップを表示
+    $NotifyIcon.ShowBalloonTip(5000)
+    Start-Sleep -Milliseconds 5000
+}
+
+# MenuItem内容がバックグラウンド実行できるようにイベント登録
+function Register-ContextMenuItem
+{
+    [CmdletBinding()]
+    param (
+        [Parameter()]
+        [String]
+        $Text,
+        [ScriptBlock]
+        $Click
+    )
+
+    $MenuItem = New-Object System.Windows.Forms.MenuItem
+    $MenuItem.Text = $_.Text
+    # $MenuItem.add_Click([ScriptBlock]$_.add_Click)
+    # Get-EventSubscriber
+    Write-Host "DEBUG Invoke-NotifyIcon MenuItem Event:" (Register-ObjectEvent -InputObject $MenuItem -EventName Click -Action $_.Click).Name
+    return $MenuItem
+}
+
+
+# System.Windows.Forms.NotifyIcon, ContextMenu, MenuItemを使う
+Add-Type -AssemblyName System.Windows.Forms
+$NotifyIcon = New-Object System.Windows.Forms.NotifyIcon
+
+# Windows PowerShellのアイコンを使用
+$NotifyIcon.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon('C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe')
+
+# マウスオーバー時に表示されるヒントにファイル名(64字未満)を表示
+$NotifyIcon.Text = [Regex]::Replace($MyInvocation.MyCommand.Name + ": $env:FileName.ts", "^(.{63}).*$", { $args.Groups[1].Value })
+
+# タスクトレイアイコン表示
+$NotifyIcon.Visible = $True
+
+# タスクトレイアイコン右クリック時に表示されるコンテキストメニュー
+$ContextMenu = New-Object System.Windows.Forms.ContextMenu
+$NotifyIcon.ContextMenu = $ContextMenu
+
+# コンテキストメニュー内容を設定
+$Settings.MenuItem | ForEach-Object {
+    $ContextMenu.MenuItems.Add((
+        Register-ContextMenuItem -Text $_.Text -Click ([ScriptBlock]$_.Click)
+    ))
+}
+
+# ログ取り開始
+Start-Transcript -LiteralPath "$($Settings.Log.Path)\$env:FileName.log"
+
+"#--------------------ログ--------------------"
+# 古いログの削除
+Get-ChildItem -LiteralPath "$($Settings.Log.Path)\" -Include *.log | Sort-Object LastWriteTime -Descending | Select-Object -Skip $Settings.Log.CntMax | ForEach-Object {
+    Remove-Item -LiteralPath "$_"
+    "INFO Remove-Item: $_"
+}
+
+"#--------------------ユーザ設定--------------------"
+# ユーザ設定をログに記述
+foreach ($line in (Get-Content -LiteralPath $PSCommandPath) -split "`n")
+{
+    if ($line -match '#--------------------関数--------------------')
+    {
+        break
+    }
+    $line
 }
 
 "#--------------------プロファイル別処理(メインルーチン)--------------------"
