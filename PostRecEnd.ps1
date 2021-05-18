@@ -362,8 +362,13 @@ function Get-ImmediateBatFileTagforEpgAutoAdd
         $OnTsSID10 = [Convert]::ToString("0x0$env:ONID16$env:TSID16$env:SID16", 10)
     )
 
+    # $env:BatFileTag を優先する
+    if (![string]::IsNullOrEmpty($env:BatFileTag))
+    {
+        return $env:BatFileTag
+    }
     # EPG自動予約キーワードが空でなければ
-    if ($AddKey -And $OnTsSID10 -ne 0)
+    elseif ($AddKey -And $OnTsSID10 -ne 0)
     {
         $EpgTimer =
         @{
