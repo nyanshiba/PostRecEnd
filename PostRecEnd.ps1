@@ -120,16 +120,20 @@ $Settings =
                 # エンコード
                 # 関数 Get-ArgumentsDualMono はステレオかデュアルモノかを判別し、引数を補完する NHKニュース7やその前後の番組で確認するとよい
                 # 関数 Get-ArgumentsPID はtsから必要なPIDを取得してFFmpegに渡す インターミッションで確認するとよい
-                $Process = Invoke-Process -FileName 'ffmpeg.exe' -Arguments "-y -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"env:FilePath`" -c:a libfdk_aac -vbr 5 -max_muxing_queue_size 4000 $(Get-ArgumentsDualMono -Stereo '-ac 2' -DualMono '-ac 1 -filter_complex channelsplit') -vf dejudder,fps=30000/1001:round=zero,fieldmatch=mode=pc:combmatch=full:combpel=70,yadif=mode=send_frame:parity=auto:deint=interlaced -c:v hevc_nvenc -preset:v p7 -profile:v main10 -rc:v constqp -rc-lookahead 1 -spatial-aq 0 -temporal-aq 1 -weighted_pred 0 -init_qpI 21 -init_qpP 21 -init_qpB 23 -b_ref_mode 1 -dpb_size 4 -multipass 2 -g 60 -bf 3 -pix_fmt yuv420p10le $(Get-ArgumentsPID) -movflags +faststart `"$env:USERPROFILE\Videos\encoded\$env:FileName.mp4`""
-                $Process = Invoke-Process
+                $Process = Invoke-Process -FileName 'ffmpeg.exe' -Arguments "-y -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"$env:FilePath`" -c:a libfdk_aac -vbr 5 -max_muxing_queue_size 4000 $(Get-ArgumentsDualMono -Stereo '-ac 2' -DualMono '-ac 1 -filter_complex channelsplit') -vf dejudder,fps=30000/1001:round=zero,fieldmatch=mode=pc:combmatch=full:combpel=70,yadif=mode=send_frame:parity=auto:deint=interlaced -c:v hevc_nvenc -preset:v p7 -profile:v main10 -rc:v constqp -rc-lookahead 1 -spatial-aq 0 -temporal-aq 1 -weighted_pred 0 -init_qpI 21 -init_qpP 21 -init_qpB 23 -b_ref_mode 1 -dpb_size 4 -multipass 2 -g 60 -bf 3 -pix_fmt yuv420p10le $(Get-ArgumentsPID) -movflags +faststart `"$env:USERPROFILE\Videos\encoded\$env:FileName.mp4`""
                 $Process | Format-List -Property *
 
                 # FFmpegの終了コードが0でなければ通知する
-                $Text = "Invoke-Process: エンコードに失敗 終了コード: $($Process.ExitCode)"
                 if ($Process.ExitCode -ne 0)
                 {
+                    $Text = "Invoke-Process: エンコードに失敗 終了コード: $($Process.ExitCode)"
                     Send-Webhook -Text $Text
                     Send-BalloonTip -Icon 'Error' -Text $Text
+                }
+                elseif ($Process.ExitCode -eq 0)
+                {
+                    $Text = "Invoke-Process: エンコード終了"
+                    Send-BalloonTip -Icon 'Info' -Text $Text
                 }
             }
         }
