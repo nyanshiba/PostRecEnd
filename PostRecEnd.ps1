@@ -498,7 +498,7 @@ function Get-ArgumentsPID
 
     # ffprobeでcodec_type,height,idをソート
     $stream = (&"ffprobe.exe" -v quiet -analyzeduration 30M -probesize 100M -i "$FilePath" -show_entries stream=codec_type,height,id,channels -print_format json 2>&1 | ConvertFrom-Json).programs.streams
-    $stream | Format-Table -Property codec_type,height,id,channels
+    Write-Host ($stream | Format-Table -Property codec_type,height,id,channels | Out-String -Width 1024)
 
     # 解像度の大きいVideoストリームを選ぶ
     [string[]]$ArgPID = ($stream | Where-Object {$_.codec_type -eq "video"} | Sort-Object -Property height -Descending | Select-Object -Index 0).id
