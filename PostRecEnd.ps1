@@ -584,14 +584,13 @@ $Settings.MenuItem | ForEach-Object {
 # ログ取り開始
 Start-Transcript -LiteralPath "$($Settings.Log.Path)\$env:FileName.log"
 
-"#--------------------ログ--------------------"
+"#--------------------ログローテ--------------------"
 # 古いログの削除
-Get-ChildItem -LiteralPath "$($Settings.Log.Path)\" -Include *.log | Sort-Object LastWriteTime -Descending | Select-Object -Skip $Settings.Log.CntMax | ForEach-Object {
-    Remove-Item -LiteralPath "$_"
+Get-ChildItem -LiteralPath "$($Settings.Log.Path)\" -Include *.log,*.txt | Sort-Object LastWriteTime -Descending | Select-Object -Skip $Settings.Log.CntMax | ForEach-Object {
+    Remove-Item -LiteralPath $_.FullName
     "INFO Remove-Item: $_"
 }
 
-"#--------------------ユーザ設定--------------------"
 # ユーザ設定をログに記述
 foreach ($line in (Get-Content -LiteralPath $PSCommandPath) -split "`n")
 {
