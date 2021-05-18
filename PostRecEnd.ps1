@@ -432,31 +432,56 @@ function Get-ArgumentsDualMono
     param (
         [Parameter()]
         [String]
-        $Stereo,
+        $Stereo = '-ac 2',
         [String]
-        $DualMono,
+        $DualMono = '-ac 1 -filter_complex channelsplit',
         [UInt32]
-        $RecInfoID = $env:RecInfoID
+        $RecInfoID = $env:RecInfoID,
+        [String]
+        $OnTsSID16 = '0x0' + $env:ONID16 + $env:TSID16 + $env:SID16,
+        [UInt32]
+        $EID10 = $env:EID10
     )
 
     # EpgTimer.CtrlCmdUtil
     $EpgTimer =
     @{
         CtrlCmdUtil = New-Object EpgTimer.CtrlCmdUtil
-        RecFileInfo = New-Object Collections.Generic.List[EpgTimer.RecFileInfo]
+        RecFileInfo = New-Object EpgTimer.RecFileInfo
+        EpgServiceEventInfo = New-Object Collections.Generic.List[EpgTimer.EpgServiceEventInfo]
     }
     # 録画済み情報取得
+    Write-Host "DEBUG Get-ArgumentsDualMono: use SendGetRecInfo (ts.program.txt)"
     [void]($EpgTimer.CtrlCmdUtil.SendGetRecInfo([uint32]$RecInfoID, [ref]$EpgTimer.RecFileInfo) -eq [EpgTimer.ErrCode]::CMD_SUCCESS)
 
-    # 番組情報からジャンルを抽出し、KeywordGenreに一致させる
-    if ($EpgTimer.RecFileInfo.ProgramInfo | Select-String -Pattern "デュアルモノ")
+    # EpgTimerSrv設定 番組情報を出力する が無効の場合, ts.program.txt がない場合
+    if ([string]::IsNullOrEmpty($EpgTimer.RecFileInfo.ProgramInfo))
     {
-        Write-Host "DEBUG Get-ArgumentsDualMono: $ArgPID"
+        # サービス指定と時間指定で過去番組情報一覧を取得する
+        Write-Host "DEBUG Get-ArgumentsDualMono: use SendEnumPgArc"
+        [void]($EpgTimer.CtrlCmdUtil.SendEnumPgArc(
+            [Int64[]]@(
+                0,
+                $OnTsSID16,
+                (Get-Date).AddDays(-1).ToFileTime(),
+                (Get-Date).ToFileTime()
+            ),
+            [ref]$EpgTimer.EpgServiceEventInfo
+        ) -eq [EpgTimer.ErrCode]::CMD_SUCCESS)
+        
+        # 指定イベントの番組情報に絞る
+        $ES_multi_lingual_flag = ($EpgTimer.EpgServiceEventInfo.eventList | Where-Object event_id -eq $EID10)[0].AudioInfo.componentList.ES_multi_lingual_flag -eq 1
+    }
+
+    # ES_multi_lingual_flagか番組情報からデュアルモノかを判断して、適切な引数を返す
+    if ($ES_multi_lingual_flag -Or ($EpgTimer.RecFileInfo.ProgramInfo | Select-String -Pattern "デュアルモノ"))
+    {
+        Write-Host "DEBUG Get-ArgumentsDualMono: $DualMono"
         return $DualMono
     }
     else
     {
-        Write-Host "DEBUG Get-ArgumentsDualMono: $ArgPID"
+        Write-Host "DEBUG Get-ArgumentsDualMono: $Stereo"
         return $Stereo
     }
 }
