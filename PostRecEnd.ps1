@@ -603,7 +603,7 @@ foreach ($line in (Get-Content -LiteralPath $PSCommandPath) -split "`n")
 
 "#--------------------プロファイル別処理(メインルーチン)--------------------"
 # $Settings.Profilesの実行条件と処理内容を回す
-$Settings.Profiles | Where-Object Conditional -And ScriptBlock | ForEach-Object {
+$Settings.Profiles | Where-Object {$_.Conditional -And $_.ScriptBlock} | ForEach-Object {
     if (Invoke-Command -ScriptBlock $_.Conditional)
     {
         Invoke-Command -ScriptBlock $_.ScriptBlock
