@@ -521,7 +521,7 @@ function Send-BalloonTip
         [String]
         $Icon = "Warning",
         [String]
-        $Title = "$($MyInvocation.MyCommand.Name)",
+        $Title = $PSCommandPath.Replace("$PSScriptRoot\",''),
         [String]
         $Text = "WARN Send-BalloonTip:`nUse -Text <String>"
     )
