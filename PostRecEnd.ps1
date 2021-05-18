@@ -366,13 +366,8 @@ function Get-ImmediateBatFileTagforEpgAutoAdd
         $OnTsSID10 = [Convert]::ToString("0x0$env:ONID16$env:TSID16$env:SID16", 10)
     )
 
-    # $env:BatFileTag を優先する
-    if (![string]::IsNullOrEmpty($env:BatFileTag))
-    {
-        return $env:BatFileTag
-    }
     # EPG自動予約キーワードが空でなければ
-    elseif ($AddKey -And $OnTsSID10 -ne 0)
+    if ($AddKey -And $OnTsSID10 -ne 0)
     {
         $EpgTimer =
         @{
@@ -381,19 +376,36 @@ function Get-ImmediateBatFileTagforEpgAutoAdd
         }
 
         # 自動予約登録条件一覧を取得する
-        Write-Host "DEBUG Get-ImmediateBatFileTagforEpgAutoAdd:" ($EpgTimer.CtrlCmdUtil.SendEnumEpgAutoAdd([ref]$EpgTimer.EpgAutoAddData) -eq [EpgTimer.ErrCode]::CMD_SUCCESS)
+        [void]($EpgTimer.CtrlCmdUtil.SendEnumEpgAutoAdd([ref]$EpgTimer.EpgAutoAddData) -eq [EpgTimer.ErrCode]::CMD_SUCCESS)
 
         # 自動予約登録条件一覧からサービス名とEPG自動予約キーワードが一致する最初の項目を選ぶ
         $BatFilePath = ($EpgTimer.EpgAutoAddData | Where-Object {$OnTsSID10 -in $_.searchInfo.serviceList -And $_.searchInfo.andKey -match $AddKey}).recSetting.BatFilePath | Select-Object -Index 0
 
         # BatFilePathからBatFileTagを抽出
         $BatFileTag = $BatFilePath -replace (".*\*","")
-        Write-Host "DEBUG Get-ImmediateBatFileTagforEpgAutoAdd: $BatFileTag"
-        return $BatFileTag
+
+        # 自動予約登録の BatFileTag があれば優先する
+        if (![string]::IsNullOrEmpty($BatFileTag))
+        {
+            Write-Host "DEBUG Get-ImmediateBatFileTagforEpgAutoAdd: $BatFileTag"
+            return $BatFileTag
+        }
+        # $env:BatFileTag があれば代わりに
+        elseif (![string]::IsNullOrEmpty($env:BatFileTag))
+        {
+            Write-Host 'DEBUG Get-ImmediateBatFileTagforEpgAutoAdd: $env:BatFileTag'
+            return $env:BatFileTag
+        }
+        # 予約キーワードは渡されたが、BatFileTagはいずれも設定されていない
+        else
+        {
+            Write-Host "DEBUG Get-ImmediateBatFileTagforEpgAutoAdd: BatFileTag is not set"
+            return $False
+        }
     }
     else
     {
-        Write-Host "WARN Get-ImmediateBatFileTagforEpgAutoAdd: -AddKey '$AddKey' and -OnTsSID10 '$OnTsSID10' are required"
+        Write-Host "WARN Get-ImmediateBatFileTagforEpgAutoAdd: -AddKey '$AddKey' or -OnTsSID10 '$OnTsSID10' is empty"
         return $False
     }
 }
