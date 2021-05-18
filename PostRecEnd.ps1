@@ -82,7 +82,7 @@ $Settings =
         }
         @{
             # 実行条件例 ジャンルの部分一致
-            Conditional = {Get-ProgramInfoGenre -match "帝国内アニメ"}
+            Conditional = {(Get-ProgramInfoGenre) -match "帝国内アニメ"}
             ScriptBlock =
             {
                 # 引数を変えてエンコする, 画像を出力する等
@@ -93,10 +93,10 @@ $Settings =
             # 実行条件 録画後実行batタグが"ts"(tsをHDDに永久保存)のとき
             Conditional =
             {
-                # 通常は$env:BatFileTagで十分
-                # Get-ImmediateBatFileTagforEpgAutoAddは予約一覧にタグが反映されていなくても、自動予約登録を参照する
+                # 通常は $env:BatFileTag で十分
+                # Get-ImmediateBatFileTagforEpgAutoAdd を使うことで、予約一覧にタグが反映されていなくても自動予約登録を参照する
                 # EpgTimerの予約一覧/自動予約登録で"タグ"プロパティを追加すると分かりやすい
-                $env:BatFileTag -eq "ts" -Or (Get-ImmediateBatFileTagforEpgAutoAdd -eq "ts")
+                (Get-ImmediateBatFileTagforEpgAutoAdd) -eq "ts"
             }
             ScriptBlock =
             {
@@ -114,7 +114,7 @@ $Settings =
         }
         # $env:BatFileTag = enc,encremove: エンコード
         @{
-            Conditional = {Get-ImmediateBatFileTagforEpgAutoAdd -in "enc","encremove"}
+            Conditional = {(Get-ImmediateBatFileTagforEpgAutoAdd) -in "enc","encremove"}
             ScriptBlock =
             {
                 # エンコード
@@ -135,7 +135,7 @@ $Settings =
         }
         # $env:BatFileTag = enc: HDDにmp4を移動, HDDの容量圧迫警告
         @{
-            Conditional = {Get-ImmediateBatFileTagforEpgAutoAdd -eq "enc"}
+            Conditional = {(Get-ImmediateBatFileTagforEpgAutoAdd) -eq "enc"}
             ScriptBlock =
             {
                 # HDDにmp4をコピー
@@ -152,7 +152,7 @@ $Settings =
         }
         # $env:BatFileTag = encremove: エンコード先のローテ
         @{
-            Conditional = {Get-ImmediateBatFileTagforEpgAutoAdd -eq "encremove"}
+            Conditional = {(Get-ImmediateBatFileTagforEpgAutoAdd) -eq "encremove"}
             ScriptBlock =
             {
                 # 一時エンコード先のmp4を閾値を超えたら削除
