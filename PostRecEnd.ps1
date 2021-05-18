@@ -411,10 +411,18 @@ function Get-ProgramInfoGenre
         RecFileInfo = New-Object EpgTimer.RecFileInfo
     }
     # 録画済み情報取得 https://github.com/xtne6f/EDCB/blob/work-plus-s/EpgTimer/EpgTimer/Common/CtrlCmd.cs#L616-L617
-    Write-Host "DEBUG Get-ProgramInfoGenre:" ($EpgTimer.CtrlCmdUtil.SendGetRecInfo([uint32]$RecInfoID, [ref]$EpgTimer.RecFileInfo) -eq [EpgTimer.ErrCode]::CMD_SUCCESS)
+    [void]($EpgTimer.CtrlCmdUtil.SendGetRecInfo([uint32]$RecInfoID, [ref]$EpgTimer.RecFileInfo) -eq [EpgTimer.ErrCode]::CMD_SUCCESS)
 
-    # 番組情報からジャンルを抽出し、KeywordGenreに一致させる
-    return ($EpgTimer.RecFileInfo.ProgramInfo -split '\r?\n' | Select-String -Pattern "ジャンル" -Context 0,3).Context.PostContext
+    # 番組情報からジャンル辺りを抽出する
+    if (![string]::IsNullOrEmpty($EpgTimer.RecFileInfo.ProgramInfo))
+    {
+        return ($EpgTimer.RecFileInfo.ProgramInfo -split '\r?\n' | Select-String -Pattern "ジャンル" -Context 0,3).Context.PostContext
+    }
+    else
+    {
+        Write-Host "WARN Get-ProgramInfoGenre: EpgTimerSrv設定で「番組情報を出力する」が無効か、ts.program.txtがありません"
+        return $False
+    }
 }
 
 # デュアルモノ判別
