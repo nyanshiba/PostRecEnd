@@ -118,9 +118,13 @@ $Settings =
             ScriptBlock =
             {
                 # エンコード
-                # 関数 Get-ArgumentsDualMono はステレオかデュアルモノかを判別し、引数を補完する NHKニュース7やその前後の番組で確認するとよい
-                # 関数 Get-ArgumentsPID はtsから必要なPIDを取得してFFmpegに渡す インターミッションで確認するとよい
+                # 関数 Get-ArgumentsDualMono はステレオかデュアルモノかを判別して引数に補完する NHKニュース7やその前後の番組で確認するとよい
+                # 関数 Get-ArgumentsPID はtsから必要なPIDを取得して引数に補完する インターミッションで確認するとよい
+                # FFmpegのエンコード設定は https://github.com/nyanshiba/best-ffmpeg-arguments#hevc_nvenc に基づいている
                 $Process = Invoke-Process -FileName 'ffmpeg.exe' -Arguments "-y -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"$env:FilePath`" -c:a libfdk_aac -vbr 5 -max_muxing_queue_size 4000 $(Get-ArgumentsDualMono -Stereo '-ac 2' -DualMono '-ac 1 -filter_complex channelsplit') -vf dejudder,fps=30000/1001:round=zero,fieldmatch=mode=pc:combmatch=full:combpel=70,yadif=mode=send_frame:parity=auto:deint=interlaced -c:v hevc_nvenc -preset:v p7 -profile:v main10 -rc:v constqp -rc-lookahead 1 -spatial-aq 0 -temporal-aq 1 -weighted_pred 0 -init_qpI 21 -init_qpP 21 -init_qpB 23 -b_ref_mode 1 -dpb_size 4 -multipass 2 -g 60 -bf 3 -pix_fmt yuv420p10le $(Get-ArgumentsPID) -movflags +faststart `"$env:USERPROFILE\Videos\encoded\$env:FileName.mp4`""
+
+                # 逆テレシネとフィールド補間に欠かせない fieldmatch の行はうるさいので削除してから出力する
+                $Process.ErrorOutput = $Process.ErrorOutput -split '\r?\n' | Select-String -NotMatch "Parsed_fieldmatch_2" | Out-String -Width 1024
                 $Process | Format-List -Property *
 
                 # FFmpegの終了コードが0でなければ通知する
