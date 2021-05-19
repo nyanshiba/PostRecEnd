@@ -362,23 +362,24 @@ function Get-ImmediateBatFileTagforEpgAutoAdd
         [String]
         $AddKey = $env:AddKey,
         # サービス名 $EpgTimer.EpgAutoAddData.searchInfo.serviceList: OriginalNetworkID($env:ONID16), TransportStreamID(TSID16), ServiceID(SID16)
-        [String]
+        [UInt64]
         $OnTsSID10 = [Convert]::ToString("0x0$env:ONID16$env:TSID16$env:SID16", 10)
     )
 
     # EPG自動予約キーワードが空でなければ
-    if ($AddKey -And $OnTsSID10 -ne 0)
-    {
-        $EpgTimer =
-        @{
-            CtrlCmdUtil = New-Object EpgTimer.CtrlCmdUtil
-            EpgAutoAddData = New-Object Collections.Generic.List[EpgTimer.EpgAutoAddData]
-        }
+    $EpgTimer =
+    @{
+        CtrlCmdUtil = New-Object EpgTimer.CtrlCmdUtil
+        EpgAutoAddData = New-Object Collections.Generic.List[EpgTimer.EpgAutoAddData]
+    }
 
+    # 予約キーワードによる録画ならば
+    if ($AddKey)
+    {
         # 自動予約登録条件一覧を取得する
         [void]($EpgTimer.CtrlCmdUtil.SendEnumEpgAutoAdd([ref]$EpgTimer.EpgAutoAddData) -eq [EpgTimer.ErrCode]::CMD_SUCCESS)
 
-        # 自動予約登録条件一覧からサービス名とEPG自動予約キーワードが一致する最初の項目を選ぶ
+        # 自動予約登録条件一覧からサービス名と予約キーワードが一致する最初の項目を選ぶ
         $BatFilePath = ($EpgTimer.EpgAutoAddData | Where-Object {$OnTsSID10 -in $_.searchInfo.serviceList -And $_.searchInfo.andKey -match $AddKey}).recSetting.BatFilePath | Select-Object -Index 0
 
         # BatFilePathからBatFileTagを抽出
@@ -390,22 +391,18 @@ function Get-ImmediateBatFileTagforEpgAutoAdd
             Write-Host "DEBUG Get-ImmediateBatFileTagforEpgAutoAdd: $BatFileTag"
             return $BatFileTag
         }
-        # $env:BatFileTag があれば代わりに
-        elseif (![string]::IsNullOrEmpty($env:BatFileTag))
-        {
-            Write-Host 'DEBUG Get-ImmediateBatFileTagforEpgAutoAdd: $env:BatFileTag'
-            return $env:BatFileTag
-        }
-        # 予約キーワードは渡されたが、BatFileTagはいずれも設定されていない
-        else
-        {
-            Write-Host "DEBUG Get-ImmediateBatFileTagforEpgAutoAdd: BatFileTag is not set"
-            return $False
-        }
     }
+
+    # $env:BatFileTag があれば代わりに
+    if (![string]::IsNullOrEmpty($env:BatFileTag))
+    {
+        Write-Host 'DEBUG Get-ImmediateBatFileTagforEpgAutoAdd: $env:BatFileTag'
+        return $env:BatFileTag
+    }
+    # BatFileTagはいずれも設定されていない
     else
     {
-        Write-Host "WARN Get-ImmediateBatFileTagforEpgAutoAdd: -AddKey '$AddKey' or -OnTsSID10 '$OnTsSID10' is empty"
+        Write-Host "DEBUG Get-ImmediateBatFileTagforEpgAutoAdd: BatFileTag is not set"
         return $False
     }
 }
