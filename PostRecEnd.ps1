@@ -101,7 +101,7 @@ $Settings =
             ScriptBlock =
             {
                 # HDDにtsを移動
-                Move-Item -LiteralPath $env:FilePath -Destination "E:\ts" -ErrorAction Stop
+                Move-Item -LiteralPath $env:FilePath -Destination "E:\ts"
 
                 # HDDの容量監視 -Round超過で通知
                 $Text = FolderRound -Mode 'Warning' -Ext '*' -Path "E:\ts" -Round 13TB
@@ -127,17 +127,34 @@ $Settings =
                 $Process.ErrorOutput = $Process.ErrorOutput -split '\r?\n' | Select-String -NotMatch "Parsed_fieldmatch_2" | Out-String -Width 1024
                 $Process | Format-List -Property *
 
-                # FFmpegの終了コードが0でなければ通知する
+                # エンコード失敗時
                 if ($Process.ExitCode -ne 0)
                 {
-                    $Text = "Invoke-Process: エンコードに失敗 終了コード: $($Process.ExitCode)"
-                    Send-Webhook -Text $Text
+                    # HDDにts, ログを退避
+                    Move-Item -LiteralPath $env:FilePath -Destination "E:\ts"
+                    Copy-Item -LiteralPath "$($Settings.Log.Path)\$env:FileName.log" "E:\ts"
+
+                    $Text = "Invoke-Process: エンコード失敗`n$env:FileName.mp4`n終了コード: $($Process.ExitCode)"
+
+                    # $Settings.Post.WebhookUrl のチャンネルにユーザIDへメンション
+                    Send-Webhook -Text ('<@379045222451249154> ' + $Text)
+
+                    # シイタケ
                     Send-BalloonTip -Icon 'Error' -Text $Text
                 }
+                # エンコード成功時
                 elseif ($Process.ExitCode -eq 0)
                 {
-                    $Text = "Invoke-Process: エンコード終了"
-                    Send-BalloonTip -Icon 'Info' -Text $Text
+                    # エンコード後のファイルサイズ
+                    $Length = (Get-ChildItem -LiteralPath "$env:USERPROFILE\Videos\encoded\$env:FileName.mp4").Length
+                    switch ([Math]::Truncate([Math]::Log($Length, 1024)))
+                    {
+                        '2' {$Length = "{0:n1} MB" -f ($Length / 1MB)}
+                        '3' {$Length = "{0:n2} GB" -f ($Length / 1GB)}
+                    }
+
+                    # 正常にエンコード終了したことをバルーンチップで通知
+                    Send-BalloonTip -Icon 'Info' -Text "Invoke-Process: エンコード終了 $Length"
                 }
             }
         }
