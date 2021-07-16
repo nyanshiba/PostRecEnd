@@ -100,6 +100,7 @@ $Settings =
             }
             ScriptBlock =
             {
+                "INFO `$Settings.Profiles.Conditional: ts"
                 # HDDにtsを移動
                 Move-Item -LiteralPath $env:FilePath -Destination "E:\ts"
 
@@ -117,6 +118,8 @@ $Settings =
             Conditional = {(Get-ImmediateBatFileTagforEpgAutoAdd) -in "enc","encremove"}
             ScriptBlock =
             {
+                "INFO `$Settings.Profiles.Conditional: enc, encremove"
+                
                 # エンコード
                 # 関数 Get-ArgumentsDualMono はデュアルモノかステレオか再エンコード不要かを判別して引数に補完する。既定値はあるが、-Copy, -Stereo, -DualMonoそれぞれ好みの引数を指定してもよい。デュアルモノはNHKニュース7、で確認するとよい。
                 # 関数 Get-ArgumentsPID はtsから必要なPIDを取得して引数に補完する。インターミッションで確認するとよい。
@@ -163,6 +166,7 @@ $Settings =
             Conditional = {(Get-ImmediateBatFileTagforEpgAutoAdd) -eq "enc"}
             ScriptBlock =
             {
+                "INFO `$Settings.Profiles.Conditional: enc"
                 # HDDにmp4をコピー
                 Move-Item -LiteralPath "$env:USERPROFILE\Videos\encoded\$env:FileName.mp4" -Destination "E:\ts"
 
@@ -180,6 +184,7 @@ $Settings =
             Conditional = {(Get-ImmediateBatFileTagforEpgAutoAdd) -eq "encremove"}
             ScriptBlock =
             {
+                "INFO `$Settings.Profiles.Conditional: encremove"
                 # 一時エンコード先のmp4を閾値を超えたら削除
                 FolderRound -Mode 'Delete' -Ext "mp4" -Path "$env:USERPROFILE\Videos\encoded" -Round 50GB
             }
@@ -191,6 +196,7 @@ $Settings =
             # 処理内容 ts容量監視
             ScriptBlock =
             {
+                "INFO `$Settings.Profiles.Conditional: tsremove, enc, encremove (always)"
                 # 録画保存フォルダのtsを閾値を超えたら削除
                 FolderRound -Mode 'Delete' -Ext "ts" -Path "$env:FolderPath" -Round 200GB
             }
@@ -397,6 +403,8 @@ function Get-ImmediateBatFileTagforEpgAutoAdd
     # 予約キーワードによる録画ならば
     if ($AddKey)
     {
+        Write-Host "DEBUG Get-ImmediateBatFileTagforEpgAutoAdd: `$env:AddKey: $AddKey"
+
         # 自動予約登録条件一覧を取得する
         [void]($EpgTimer.CtrlCmdUtil.SendEnumEpgAutoAdd([ref]$EpgTimer.EpgAutoAddData) -eq [EpgTimer.ErrCode]::CMD_SUCCESS)
 
