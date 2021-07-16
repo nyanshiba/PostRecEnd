@@ -118,10 +118,10 @@ $Settings =
             ScriptBlock =
             {
                 # エンコード
-                # 関数 Get-ArgumentsDualMono はステレオかデュアルモノかを判別して引数に補完する NHKニュース7やその前後の番組で確認するとよい
-                # 関数 Get-ArgumentsPID はtsから必要なPIDを取得して引数に補完する インターミッションで確認するとよい
-                # FFmpegのエンコード設定は https://github.com/nyanshiba/best-ffmpeg-arguments#hevc_nvenc に基づいている
-                $Process = Invoke-Process -FileName 'ffmpeg.exe' -Arguments "-y -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"$env:FilePath`" -c:a libfdk_aac -vbr 5 -max_muxing_queue_size 4000 $(Get-ArgumentsDualMono -Stereo '-ac 2' -DualMono '-ac 1 -filter_complex channelsplit') -vf dejudder,fps=30000/1001:round=zero,fieldmatch=mode=pc:combmatch=full:combpel=70,yadif=mode=send_frame:parity=auto:deint=interlaced -c:v hevc_nvenc -preset:v p7 -profile:v main10 -rc:v constqp -rc-lookahead 1 -spatial-aq 0 -temporal-aq 1 -weighted_pred 0 -init_qpI 21 -init_qpP 21 -init_qpB 23 -b_ref_mode 1 -dpb_size 4 -multipass 2 -g 60 -bf 3 -pix_fmt yuv420p10le $(Get-ArgumentsPID) -movflags +faststart `"$env:USERPROFILE\Videos\encoded\$env:FileName.mp4`""
+                # 関数 Get-ArgumentsDualMono はデュアルモノかステレオか再エンコード不要かを判別して引数に補完する。既定値はあるが、-Copy, -Stereo, -DualMonoそれぞれ好みの引数を指定してもよい。デュアルモノはNHKニュース7、で確認するとよい。
+                # 関数 Get-ArgumentsPID はtsから必要なPIDを取得して引数に補完する。インターミッションで確認するとよい。
+                # FFmpegのエンコード設定は https://github.com/nyanshiba/best-ffmpeg-arguments#hevc_nvenc に基づいている。hevc_nvencの例では、300M-1.2GB程度でVMAF97辺りのアニメエンコードが可能。
+                $Process = Invoke-Process -FileName 'ffmpeg.exe' -Arguments "-y -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"$env:FilePath`" $(Get-ArgumentsDualMono -Copy '-bsf:a aac_adtstoasc -c:a copy' -Stereo '-c:a libfdk_aac -ac 2 -vbr 5 -max_muxing_queue_size 4000' -DualMono '-c:a libfdk_aac -ac 1 -vbr 5 -max_muxing_queue_size 4000 -filter_complex channelsplit') -vf dejudder,fps=30000/1001:round=zero,fieldmatch=mode=pc:combmatch=full:combpel=70,yadif=mode=send_frame:parity=auto:deint=interlaced -c:v hevc_nvenc -preset:v p7 -profile:v main10 -rc:v constqp -rc-lookahead 1 -spatial-aq 0 -temporal-aq 1 -weighted_pred 0 -init_qpI 21 -init_qpP 21 -init_qpB 23 -b_ref_mode 1 -dpb_size 4 -multipass 2 -g 60 -bf 3 -pix_fmt yuv420p10le $(Get-ArgumentsPID) -movflags +faststart `"$env:USERPROFILE\Videos\encoded\$env:FileName.mp4`""
 
                 # 逆テレシネとフィールド補間に欠かせない fieldmatch の行はうるさいので削除してから出力する
                 $Process.ErrorOutput = $Process.ErrorOutput -split '\r?\n' | Select-String -NotMatch "Parsed_fieldmatch_2" | Out-String -Width 1024
@@ -459,16 +459,20 @@ function Get-ProgramInfoGenre
     }
 }
 
-# デュアルモノ判別
+# デュアルモノと-bsf:a aac_adtstoasc -c:a copyが失敗する番組を判別して、適切な引数を返す
 function Get-ArgumentsDualMono
 {
     [CmdletBinding()]
     param (
         [Parameter()]
         [String]
-        $Stereo = '-ac 2',
+        $Copy = '-bsf:a aac_adtstoasc -c:a copy',
         [String]
-        $DualMono = '-ac 1 -filter_complex channelsplit',
+        $Stereo = '-c:a aac -ac 2 -b:a 256k -max_muxing_queue_size 4000',
+        [String]
+        $DualMono = '-c:a aac -ac 1 -b:a 128k -max_muxing_queue_size 4000 -filter_complex channelsplit',
+        [String]
+        $FilePath = $env:FilePath,
         [UInt32]
         $RecInfoID = $env:RecInfoID,
         [UInt64]
@@ -504,8 +508,20 @@ function Get-ArgumentsDualMono
     }
     else
     {
-        Write-Host "DEBUG Get-ArgumentsDualMono: $Stereo"
-        return $Stereo
+        # -bsf:a aac_adtstoasc -c:a copyが失敗する番組のための回避策
+        $Process = Invoke-Process -FileName 'ffmpeg.exe' -Arguments "-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"$FilePath`" -vn -bsf:a aac_adtstoasc -c:a copy $(Get-ArgumentsPID -FilePath $FilePath) -f null -"
+        if ($Process.ErrorOutput -split '\r?\n' | Select-String -Pattern "^\[aac_adtstoasc @ \w+\] Input packet too small$")
+        {
+            # ダメそうなら再エンコする
+            Write-Host "DEBUG Get-ArgumentsDualMono: $Stereo"
+            return $Stereo
+        }
+        else
+        {
+            # 再エンコしない
+            Write-Host "DEBUG Get-ArgumentsDualMono: $Copy"
+            return $Copy
+        }
     }
 }
 
@@ -606,6 +622,7 @@ $Settings.MenuItem | ForEach-Object {
 
 # ログ取り開始
 Start-Transcript -LiteralPath "$($Settings.Log.Path)\$env:FileName.log"
+ls env:
 
 "#--------------------ログローテ--------------------"
 # 古いログの削除
