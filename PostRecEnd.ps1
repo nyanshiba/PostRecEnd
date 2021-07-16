@@ -157,7 +157,7 @@ $Settings =
                     }
 
                     # 正常にエンコード終了したことをバルーンチップで通知
-                    Send-BalloonTip -Icon 'Info' -Text "Invoke-Process: エンコード終了 $Length"
+                    Send-BalloonTip -Icon 'Info' -Text "Invoke-Process: エンコード終了`n$env:FileName.mp4`n$Length"
                 }
             }
         }
