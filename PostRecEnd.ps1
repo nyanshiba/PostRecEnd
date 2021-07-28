@@ -517,7 +517,7 @@ function Get-ArgumentsDualMono
     else
     {
         # -bsf:a aac_adtstoasc -c:a copyが失敗する番組のための回避策
-        $Process = Invoke-Process -FileName 'ffmpeg.exe' -Arguments "-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -i `"$FilePath`" -vn -bsf:a aac_adtstoasc -c:a copy $(Get-ArgumentsPID -FilePath $FilePath) -f null -"
+        $Process = Invoke-Process -FileName 'ffmpeg.exe' -Arguments "-y -hide_banner -nostats -analyzeduration 30M -probesize 100M -fflags +discardcorrupt -vn -i `"$FilePath`" -bsf:a aac_adtstoasc -c:a copy $(Get-ArgumentsPID -FilePath $FilePath -Video $False -Audio $True) -f null -"
         if ($Process.ErrorOutput -split '\r?\n' | Select-String -Pattern "^\[aac_adtstoasc @ \w+\] Input packet too small$")
         {
             # ダメそうなら再エンコする
@@ -534,28 +534,46 @@ function Get-ArgumentsDualMono
 }
 
 # PID引数の設定
+# https://www.tele.soumu.go.jp/horei/reiki_honbun/a72ab04601.html PMTの構成
 function Get-ArgumentsPID
 {
     [CmdletBinding()]
     param (
         [Parameter()]
         [String]
-        $FilePath = $env:FilePath
+        $FilePath = $env:FilePath,
+        [Bool]
+        $Video = $True,
+        [Bool]
+        $Audio = $True
     )
 
-    # ffprobeでcodec_type,height,idをソート
-    $stream = (&"ffprobe.exe" -v quiet -analyzeduration 30M -probesize 100M -i "$FilePath" -show_entries stream=codec_type,height,id,channels -print_format json 2>&1 | ConvertFrom-Json).programs.streams
-    Write-Host ($stream | Format-Table -Property codec_type,height,id,channels | Out-String -Width 1024)
+    # ffprobeで ストリームPID, ストリームの種類, 映像の高さ, 音声のチャンネル数 をソート
+    # -analyzeduration...がないと、videoのheightやaudioのchanelsが0になる場合がインターミッションで確認できる
+    $streams = (&"ffprobe.exe" -v quiet -analyzeduration 30M -probesize 100M -i "$FilePath" -show_entries stream=id,codec_type,height,channels -print_format json 2>&1 | ConvertFrom-Json)
+    $streams = $streams.programs.streams | Select-Object -Property id,codec_type,height,channels | Where-Object codec_type -in 'video','audio'
+    Write-Host ($streams | Out-String -Width 1024)
 
-    # 解像度の大きいVideoストリームを選ぶ
-    [string[]]$ArgPID = ($stream | Where-Object {$_.codec_type -eq "video"} | Sort-Object -Property height -Descending | Select-Object -Index 0).id
+    # 解像度の大きいvideoストリームのPID(エレメンタリーPID？)上位4bit分(0x1)
+    $prefix = ($streams | Sort-Object -Property height -Descending | Select-Object -Index 0).id.Substring(0,3)
+    # prefixが同じvideo, audioをソートし、0 channelsなaudioは除外
+    $streams = $streams | Where-Object {$_.id -match $prefix -And $_.channels -ne "0"}
 
-    # VideoのPIDの先頭(0x1..)と一致するAudioストリームを選ぶ
-    $ArgPID += ($stream | Where-Object {$_.codec_type -eq "audio" -And $_.channels -ne "0" -And $_.id -match ($ArgPID).Substring(0,3)}).id
+    # 映像のPIDのみを返す Get-ArgumentsPID -Video $True -Audio $False
+    if ($Video -And !$Audio)
+    {
+        $streams = $streams | Where-Object codec_type -eq 'video'
+    }
+    # 音声のPIDのみ
+    elseif (!$Video -And $Audio)
+    {
+        $streams = $streams | Where-Object codec_type -eq 'audio'
+    }
+    # 映像・音声のPID(デフォルト) 何もしない
 
     # FFmpeg引数のフォーマットに直す
-    [string]$ArgPID = "-map i:" + ($ArgPID -join " -map i:")
-    Write-Host "DEBUG Get-ArgumentsPID: $ArgPID"
+    [string]$ArgPID = "-map i:" + ([string[]]$streams.id -join " -map i:")
+    Write-Host "DEBUG Get-ArgumentsPID (-Video `$$Video -Audio `$$Audio): $ArgPID"
     return $ArgPID
 }
 
