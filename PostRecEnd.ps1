@@ -120,6 +120,13 @@ $Settings =
             {
                 "INFO `$Settings.Profiles.Conditional: enc, encremove"
                 
+                # obs64.exe が実行中なら4時間までは待機
+                for ($min = 0; $min -le 240 -And (Get-Process -Name obs64 -ErrorAction SilentlyContinue).Count -ne 0; $min++)
+                {
+                    "DEBUG $(Get-Date) obs64.exeが実行中です"
+                    Start-Sleep -Seconds 60
+                }
+                
                 # エンコード
                 # 関数 Get-ArgumentsDualMono はデュアルモノかステレオか再エンコード不要かを判別して引数に補完する。既定値はあるが、-Copy, -Stereo, -DualMonoそれぞれ好みの引数を指定してもよい。デュアルモノはNHKニュース7、で確認するとよい。
                 # 関数 Get-ArgumentsPID はtsから必要なPIDを取得して引数に補完する。インターミッションで確認するとよい。
