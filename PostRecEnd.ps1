@@ -109,7 +109,7 @@ $Settings =
                 # 通常は $env:BatFileTag で十分
                 # Get-ImmediateBatFileTagforEpgAutoAdd を使うことで、予約一覧にタグが反映されていなくても自動予約登録を参照する
                 # EpgTimerの予約一覧/自動予約登録で"タグ"プロパティを追加すると分かりやすい
-                (Get-ImmediateBatFileTagforEpgAutoAdd) -eq "ts"
+                (Get-ImmediateBatFileTagforEpgAutoAdd) -eq "ts" -Or $env:Scrambles -ne 0
             }
             ScriptBlock =
             {
