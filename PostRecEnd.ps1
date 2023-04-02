@@ -212,6 +212,38 @@ $Settings =
 }
 
 #--------------------関数--------------------
+# 効率よく同時エンコードするため、実行中のプロセスが使用するスレッドを均等割りする
+function Get-EquallyDividedProcessorAffinity
+{
+    param
+    (
+        [int]$Threads = $env:NUMBER_OF_PROCESSORS,
+        [string]$ProcessName = 'ffmpeg'
+    )
+
+    # 同じ名前のプロセスを取得
+    $ProcessList = Get-Process -Name ([System.IO.Path]::GetFileNameWithoutExtension("$ProcessName")) -ErrorAction SilentlyContinue
+
+    # プロセスがない
+    if (!$ProcessList)
+    {
+        Write-Host "WARN Get-EquallyDividedProcessorAffinity: $('1' * $env:NUMBER_OF_PROCESSORS)"
+        return $False
+    }
+
+    # スレッドをプロセス数で割る
+    $ThreadsforProcess = $Threads / $ProcessList.Count
+
+    # 同じ名前のプロセスすべてにスレッド数を均等に割り振る
+    for ($i = 0; $i -lt $ProcessList.Count; $i++)
+    {
+        # 00000000 -repace [Regex](0{1*4})0{4}, 11110000 ？？？
+        $Base2Affinity = ('0' * $Threads) -replace "(?<=^0{$($i * $ThreadsforProcess)})0{$ThreadsforProcess}", ('1' * $ThreadsforProcess)
+        Write-Host "DEBUG Get-EquallyDividedProcessorAffinity: $Base2Affinity"
+        $ProcessList[$i].ProcessorAffinity = [Convert]::ToInt32($Base2Affinity, 2)
+    }
+}
+
 # ffmpeg, &ffmpeg, .\ffmpegでは複雑な引数に対応できない
 # Start-ProcessのStandardOutput, Errorはファイル出力のみ
 function Invoke-Process
@@ -221,8 +253,8 @@ function Invoke-Process
         [Parameter()]
         [String]
         $Priority = 'Normal',
-        [Int32]
-        $Affinity =  [Convert]::ToInt32(('1' * $env:NUMBER_OF_PROCESSORS), 2), 
+        [Bool]
+        $Affinity =  $True, 
         [String]
         $FileName = 'powershell.exe',
         [String]
@@ -273,7 +305,10 @@ function Invoke-Process
     # execution
     $ps.Start() > $Null
     $ps.PriorityClass = $Priority
-    $ps.ProcessorAffinity = $Affinity
+    if ($Affinity)
+    {
+        Get-EquallyDividedProcessorAffinity -ProcessName $FileName
+    }
     $ps.BeginOutputReadLine()
     $ps.BeginErrorReadLine()
 
