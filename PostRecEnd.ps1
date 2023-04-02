@@ -2,6 +2,12 @@
 #Requires -Version 5
 #Requires -PSEdition Desktop
 
+param
+(
+    # $Settings.Profiles.Conditional に条件式を書いておけば、そのScriptBlockだけ呼び出して使用できる
+    [String]$Conditional
+)
+
 #--------------------ユーザ設定--------------------
 $Settings =
 @{
@@ -51,8 +57,15 @@ $Settings =
     Profiles =
     @(
         @{
-            # 常に最初に実行
-            Conditional = {$True}
+            # powershell.exe PostRecEnd.ps1 -Conditional "ManualEncode"
+            Conditional = {$Conditional -eq "ManualEncode"}
+            ScriptBlock =
+            {
+            }
+        }
+        @{
+            # EpgTimerから呼び出し(EpgTimerが追加する環境変数なら何でもよい)の場合、最初に実行
+            Conditional = {$env:RecMode}
             ScriptBlock =
             {
                 #視聴予約なら終了
@@ -199,7 +212,7 @@ $Settings =
         # tsremove,enc,encremove ≒ always: 録画先のローテ
         @{
             # 実行条件 常に実行
-            Conditional = {$True}
+            Conditional = {$env:TSID16}
             # 処理内容 ts容量監視
             ScriptBlock =
             {
