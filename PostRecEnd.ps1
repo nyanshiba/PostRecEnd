@@ -71,14 +71,14 @@ $Settings =
                 #視聴予約なら終了
                 if ($env:RecMode -eq 4)
                 {
-                    Send-BalloonTip -Icon 'Info' -Text "視聴予約 $env:Title"
+                    Send-BalloonTip -Icon 'Info' -Text "視聴予約`n$env:Title"
                     exit
                 }
                 # ファイル名が空なら
                 elseif ([string]::IsNullOrEmpty($env:FilePath))
                 {
-                    $Text = "録画失敗 $env:Title"
-                    Send-Webhook -Text $Text
+                    $Text = "❌録画失敗`n$env:Result`n$env:Title"
+                    Send-Webhook -Text ('<@379045222451249154> ' + $Text)
                     Send-BalloonTip -Icon 'Error' -Text $Text
                 }
             }
@@ -153,17 +153,64 @@ $Settings =
                 # エンコード失敗時
                 if ($Process.ExitCode -ne 0)
                 {
+                    # $Settings.Post.WebhookUrl のチャンネルにユーザIDへメンション
+                    Send-Webhook -Payload ([PSCustomObject]@{
+                        content = "<@379045222451249154> ❌エンコード失敗`n$env:FileName"
+                        username = "PostRecEnd.ps1"
+                        avatar_url = "https://cdn.discordapp.com/emojis/912607140571668490.png"
+                        embeds =
+                        @(
+                            @{
+                                title = "PostRecEnd.ps1"
+                                description = $env:Title
+                                color = 0xc21e54
+                                fields =
+                                @(
+                                    @{
+                                        name = "Drops"
+                                        value = $env:Drops
+                                        inline = 'true'
+                                    }
+                                    @{
+                                        name = "Scrambles"
+                                        value = $env:Scrambles
+                                        inline = 'true'
+                                    }
+                                    @{
+                                        name = "Result"
+                                        value = $env:Result
+                                        inline = 'true'
+                                    }
+                                    @{
+                                        name = "ErrorOutput"
+                                        value = (
+                                            $Process.ErrorOutput -split '\r?\n' | Select-String -Pattern "\[(error|fatal)\]|Conversion failed" | Select-Object -Last 5 | ForEach-Object {
+                                                $_ -replace ' @ \w{16}', ''
+                                            } | Out-String
+                                        )
+                                        inline = 'false'
+                                    }
+                                    @{
+                                        name = "ExitCode"
+                                        value = $Process.ExitCode
+                                        inline = 'true'
+                                    }
+                                    @{
+                                        name = "FileSize"
+                                        value = (Get-Item -LiteralPath "$env:USERPROFILE\Videos\encoded\$env:FileName.mp4").Length
+                                        inline = 'true'
+                                    }
+                                )
+                            }
+                        )
+                    })
+
                     # HDDにts, ログを退避
                     Move-Item -LiteralPath $env:FilePath -Destination "E:\ts"
                     Copy-Item -LiteralPath "$($Settings.Log.Path)\$env:FileName.log" "E:\ts"
 
-                    $Text = "Invoke-Process: エンコード失敗`n$env:FileName.mp4`n終了コード: $($Process.ExitCode)"
-
-                    # $Settings.Post.WebhookUrl のチャンネルにユーザIDへメンション
-                    Send-Webhook -Text ('<@379045222451249154> ' + $Text)
-
                     # シイタケ
-                    Send-BalloonTip -Icon 'Error' -Text $Text
+                    Send-BalloonTip -Icon 'Error' -Text "Invoke-Process: エンコード失敗`n$env:FileName.mp4`n終了コード: $($Process.ExitCode)"
                 }
                 # エンコード成功時
                 elseif ($Process.ExitCode -eq 0)
